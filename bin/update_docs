@@ -1,0 +1,20 @@
+#!/bin/bash -e
+FILE=$(readlink -f $0)
+DIR=${FILE%/*}
+DIR=${DIR%/*}
+cd $DIR
+
+#trap "git co master" EXIT
+
+git checkout gh-pages
+git checkout master src vsn.mk
+cd src
+make docs
+cd ..
+git rm -fr src vsn.mk
+mv doc/* .
+rmdir doc
+
+git commit -a
+git push origin
+git co master
