@@ -10,12 +10,22 @@
 @doc
 
 <ol>
+<li>{@section Overview}</li>
 <li>{@section Building}</li>
 <li>{@section Issue Tracking}</li>
 <li>{@section Architecture}</li>
 <li>{@section Known Limitations}</li>
 <li>{@section Usage}</li>
 </ol>
+
+== Overview ==
+
+ZeroMQ is an open-source fast middleware messaging framework supporting 
+unicast and multicast communications between peers using various convenient
+design patterns.  This project aims at interperability of Erlang with other
+ZeroMQ distributed clients that may be written in other languages.
+
+ZeroMQ project is found here: [http://zeromq.org]
 
 == Building ==
 
@@ -60,7 +70,7 @@ Run:
 
 == Issue Tracking ==
 
-[http://www.zeromq.org/bindings:erlang]
+[http://github.com/saleyn/erlzmq/issues]
 
 == Architecture ==
 
