@@ -15,12 +15,17 @@ git rm -fr src vsn.mk
 mv doc/* .
 rmdir doc
 
+ret=0
+
 set +e
-if ! git commit -a ; then
+if git commit -a ; then
+    git push origin
+else
+    ret=1
     git reset --hard
-    exit 1
 fi
 set -e
 
-git push origin
 git co master
+
+exit $ret
