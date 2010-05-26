@@ -6,6 +6,7 @@
 %%% @author Dhammika Pathirana <dhammika at gmail dot com>
 %%% @author Serge Aleynikov <saleyn at gmail dot com>.
 %%% @copyright 2010 Dhammika Pathirana and Serge Aleynikov
+%%% @version {@version}
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @type zmq_socket().  Opaque 0MQ socket type.

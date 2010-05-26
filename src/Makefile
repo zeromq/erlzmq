@@ -32,5 +32,6 @@ $(DOC_DIR):
 #$(DOC_DIR)/overview.html: overview.edoc
 #	erl -noshell -run edoc_run file '"$<"' '[{dir, "$(DOC_DIR)"}]' -run init stop
 $(DOC_DIR)/zmq.html: zmq.erl overview.edoc
-	erl -noshell -run edoc_run application "'zmq'" '"."' '[{dir, "$(DOC_DIR)"}]' -run init stop
+	erl -noshell -run edoc_run application "'zmq'" '"."' \
+		'[{dir, "$(DOC_DIR)"}, {def, [{version, "$(VSN)"}]}]' -run init stop
 
