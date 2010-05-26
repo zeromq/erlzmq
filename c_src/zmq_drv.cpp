@@ -2,10 +2,12 @@
  * ------------------------------------------------------------------
  * Erlang bindings for ZeroMQ.
  * ------------------------------------------------------------------
- * <dhammika@gmail.com> wrote this code, copyright disclaimed.
- * <saleyn@gmail.com> bug fixes and many enhancements to the driver
- * to support non-blocking I/O.
+ * Copyright (c) 2010 Dhammika Pathirana and Serge Aleynikov
+ * <dhammika@gmail.com> wrote original C code, copyright disclaimed.
+ * <saleyn@gmail.com> C++ rewrite, bug fixes and many enhancements 
+ * to the driver to support non-blocking I/O.
  * ------------------------------------------------------------------
+ * See ../LICENSE for license details
  */
 
 #include <stdio.h>

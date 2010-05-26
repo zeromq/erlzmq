@@ -4,10 +4,11 @@ ERL ?= erl
 ERL_INTERFACE_DIR=$(shell \
 	$(ERL) -eval 'io:format("~s\n", [code:lib_dir(erl_interface)]).' \
 	       -noshell -s erlang halt)
-ERL_INSTALL_DIR=$(dir $(dir $(dir $(dir $(ERL_INTERFACE_DIR)))))
+ERL_INSTALL_DIR := $(patsubst %/,%,$(dir $(ERL_INTERFACE_DIR)))
+ERL_INSTALL_DIR := $(patsubst %/,%,$(dir $(ERL_INSTALL_DIR)))
 
-ifndef $(ERL_INSTALL_DIR)
-	$(error Erlang installation directory not found)
+ifeq (,$(ERL_INSTALL_DIR))
+$(error Erlang installation directory not found)
 endif
 
 LDFLAGS=-shared -fPIC ${ERL_INTERFACE_DIR}/lib/libei.a -L${ZMQ_DIR}/lib -lzmq -lpthread -luuid
