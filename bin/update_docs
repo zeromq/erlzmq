@@ -15,6 +15,11 @@ git rm -fr src vsn.mk
 mv doc/* .
 rmdir doc
 
-git commit -a
+set +e
+if !git commit -a ; then
+    git reset --hard
+fi
+set -e
+
 git push origin
 git co master
