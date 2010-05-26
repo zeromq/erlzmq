@@ -1,27 +1,32 @@
-% Basic PUB/SUB server for testing.
+%% Basic PUB/SUB server for testing.
+%% @hidden
 
 -module(zmq_pubserver).
--export([run/0]).
+-export([run/0, run/2]).
 
 run() ->
+    run(50, 1000).
+run(N, Delay) ->
     zmq:start_link(),
-    zmq:init(1,1,0),
-    case zmq:socket(zmq_pub) of
+    spawn(fun() ->
+        case zmq:socket(pub, []) of
         {ok, Socket} -> 
-            zmq:bind(Socket, term_to_binary("tcp://127.0.0.1:5550")),
-            send(Socket);
-        other -> other
-    end.
+            zmq:bind(Socket, "tcp://127.0.0.1:5550"),
+            send(Socket, Delay, N);
+        Other -> 
+            Other
+        end
+    end).
 
-send(Socket) ->
-    send(Socket, 1).
-
-send(Socket, MsgIndex) ->
-    Data = lists:flatten(io_lib:format("Msg ~B", [MsgIndex])),
-    io:format("Snd ~p ~n", [Data]),
-    case zmq:send(Socket, list_to_binary(Data)) of 
-        ok -> 
-            timer:sleep(1000),
-            send(Socket, MsgIndex + 1);
-        other -> other
+send(_Socket, _Delay, 0) ->
+    ok;
+send(Socket, Delay, MsgIndex) ->
+    Data = {msg, MsgIndex},
+    case zmq:send(Socket, term_to_binary(Data)) of 
+    ok -> 
+        io:format("~p sent ~p\n", [self(), Data]),
+        timer:sleep(Delay),
+        send(Socket, Delay, MsgIndex-1);
+    Other -> 
+        io:format("~p unexpected error in zmq:send(): ~p\n", [self(), Other])
     end.

@@ -1,12 +1,26 @@
 Erlang bindings for ZeroMQ (http://www.zeromq.org).
 
+Generate documentation by running "make docs".
+
+See doc/index.html for full documentation.
+
 Examples
     PUB/SUB zmq_pubserver/zmq_subclient
     REQ/REP zmq_repserver/zmq_reqclient
 
-License/Copyright
-The author disclaims copyright.
-If you find this code useful you can buy me a beer in return.
+    1> zmq_pubserver:run().
+    2> zmq_subclient:run().
+
+    You can run a server and any number of clients 
+    in the same Erlang shell or on different nodes.
+
+License
+    BSD License
+
+Copyright
+    Copyright (c) 2010 Dhammika Pathirana <dhammika@gmail.com>
+    Copywight (c) 2010 Serge Aleynikov <saleyn@gmail.com>
 
 Contacts
-Report bugs to <dhammika@gmail.com>
+    Report bugs to <dhammika@gmail.com> and <saleyn@gmail.com>
+

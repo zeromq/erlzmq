@@ -1,112 +1,193 @@
 %%%-------------------------------------------------------------------
-%%% @doc
-%%% Erlang bindings for ZeroMQ.
-%%% ------------------------------------------------------------------
-%%% <dhammika@gmail.com> wrote this code, copyright disclaimed.
-%%% ------------------------------------------------------------------
+%%% File: $Id$
+%%%-------------------------------------------------------------------
+%%% @doc Erlang bindings for ZeroMQ.
+%%%
+%%% @author Dhammika Pathirana <dhammika at gmail dot com>
+%%% @author Serge Aleynikov <saleyn at gmail dot com>.
+%%% @copyright 2010 Dhammika Pathirana and Serge Aleynikov
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @type zmq_socket().  Opaque 0MQ socket type.
+%%% @type zmq_sockopt() = {hwm, integer()}
+%%%                     | {lwm, integer()}
+%%%                     | {swap, integer()}
+%%%                     | {affinity, integer()}
+%%%                     | {identity, string()}
+%%%                     | {subscribe, string()}
+%%%                     | {unsubscibe, string()}
+%%%                     | {rate, integer()}
+%%%                     | {recovery_ivl, integer()}
+%%%                     | {mcast_loop, boolean()}
+%%%                     | {sndbuf, integer()}
+%%%                     | {rcvbuf, integer()}
+%%%                     | {rcvmore, boolean()}
+%%%                     | {active, boolean()}.     
+%%%           0MQ socket options. See 0MQ man pages for details.
+%%%           One additional options `active' indicates to the driver
+%%%           that incoming messages must be automatically delivered 
+%%%           to the process owner's mailbox instead of explicitely
+%%%           requiring recv/1 call.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(zmq).
 -author("dhammika@gmail.com").
+-author("saleyn@gmail.com").
+-id("$Id$").
 
 -behaviour(gen_server).
 
 %% ZMQ API
--export([start_link/0, init/3, term/0,
-         socket/1, close/1, sockopt/2, bind/2, connect/2,
-	     send/2, recv/1]).
+-export([start_link/0, start_link/1,
+         socket/1, socket/2, close/1, setsockopt/2, 
+         bind/2, connect/2, send/2, recv/1, format_error/1]).
+
+-export([port/0]).
 
 %% gen_server callbacks.
 -export([init/1,
          handle_call/3, handle_cast/2, handle_info/2,
 	     terminate/2, code_change/3]).
 
--define('DRIVER_NAME', 'zmq_drv').
+-include("zmq.hrl").
+
 -record(state, {port}).
-
-%% ZMQ socket types.
--define('ZMQ_P2P', 0).
--define('ZMQ_PUB', 1).
--define('ZMQ_SUB', 2).
--define('ZMQ_REQ', 3).
--define('ZMQ_REP', 4).
--define('ZMQ_XREQ', 5).
--define('ZMQ_XREP', 6).
--define('ZMQ_UPSTREAM', 7).
--define('ZMQ_DOWNSTREAM', 8).
-
-%% ZMQ socket options.
--define('ZMQ_HWM', 1).
--define('ZMQ_LWM', 2).
--define('ZMQ_SWAP', 3).
--define('ZMQ_AFFINITY', 4).
--define('ZMQ_IDENTITY', 5).
--define('ZMQ_SUBSCRIBE', 6).
--define('ZMQ_UNSUBSCRIBE', 7).
--define('ZMQ_RATE', 8).
--define('ZMQ_RECOVERY_IVL', 9).
--define('ZMQ_MCAST_LOOP', 10).
--define('ZMQ_SNDBUF', 11).
--define('ZMQ_RCVBUF', 12).
--define('ZMQ_RCVMORE', 13).
-
-%% ZMQ send/recv options.
--define('ZMQ_NOBLOCK', 1).
--define('ZMQ_SNDMORE', 2).
-
-%% ZMQ port options.
--define('ZMQ_INIT', 1).
--define('ZMQ_TERM', 2).
--define('ZMQ_SOCKET', 3).
--define('ZMQ_CLOSE', 4).
--define('ZMQ_SETSOCKOPT', 5).
--define('ZMQ_GETSOCKOPT', 6).
--define('ZMQ_BIND', 7).
--define('ZMQ_CONNECT', 8).
--define('ZMQ_SEND', 9).
--define('ZMQ_RECV', 10).
-
-%% Debug log.
-log(Msg, MsgArgs) ->
-    io:format(string:concat(string:concat("[~p:~p] ", Msg), "~n"),
-    [?MODULE, ?LINE | MsgArgs]).
 
 %%%===================================================================
 %%% ZMQ API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Start the server.
-%%
-%% @spec start_link() ->
-%%          {ok, Pid} |
-%%          {error, Error} |
-%%          ignore
+%% @equiv start_link(1)
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-init(AppThreads, IoThreads, Flags) ->
-    gen_server:call(?MODULE, {init, AppThreads, IoThreads, Flags}).
-term() ->
-    gen_server:call(?MODULE, {term}).
-socket(Type) ->
-    gen_server:call(?MODULE, {socket, Type}).
-close(Socket) ->
+    start_link(1).
+
+%%--------------------------------------------------------------------
+%% @doc Start the server.
+%% @spec (IoThreads) -> {ok, Pid} | {error, Error} | ignore
+%% @end
+%%--------------------------------------------------------------------
+start_link(IoThreads) when is_integer(IoThreads) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [IoThreads], []).
+
+socket(Type) when is_atom(Type) ->
+    socket(Type, []).
+
+%%--------------------------------------------------------------------
+%% @doc Create a 0MQ socket.
+%% @spec (Type, Options) -> {ok, Socket::zmq_socket()} | {error, Reason}
+%%          Type = p2p | pub | sub | req | rep | 
+%%                 xreq | xrep | upstream | downstream
+%%          Options = [Option]
+%%          Option  = {active, boolean()}
+%%                  | {zmq_sockopt(), Value}
+%% @end
+%%--------------------------------------------------------------------
+socket(Type, Options) when is_atom(Type), is_list(Options) ->
+%    gen_server:call(?MODULE, {socket, Type, Options}).
+    % We are using direct call to the driver to create the socket,
+    % because we need the driver to know the socket owner's pid, so
+    % that it can deliver messages to its mailbox in the passive mode
+    try gen_server:call(?MODULE, port) of
+    Port when is_port(Port) ->
+        [check_sockopt({O, V}) || {O,V} <- Options],
+        Msg     = encode_msg_socket(Type),
+        {ok, S} = driver(Port, Msg),
+        case driver(Port, encode_sock_opts(S, Options)) of
+        ok -> 
+            {ok, {Port, S}};
+        {error, Why} ->
+            driver(Port, encode_close(S)),
+            throw(Why)
+        end
+    catch _:Error ->
+        {error, Error}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Close a 0MQ socket.
+%% @spec (Socket::zmq_socket()) -> ok | {error, Reason}
+%% @end
+%%--------------------------------------------------------------------
+close({Port, Socket}) when is_integer(Socket) ->
+    Msg = encode_close(Socket),
+    driver(Port, Msg);
+close(Socket) when is_integer(Socket) ->
     gen_server:call(?MODULE, {close, Socket}).
-sockopt(Command, {Socket, Option, Value}) ->
-    gen_server:call(?MODULE, {sockopt, Command, {Socket, Option, Value}}).
-%sockopt(Command, {Socket, Option}) ->
-%    gen_server:call(?MODULE, {sockopt, Command, {Socket, Option}}).
-bind(Socket, Address) ->
-    gen_server:call(?MODULE, {bind, Socket, Address}).
-connect(Socket, Address) ->
-    gen_server:call(?MODULE, {connect, Socket, Address}).
-send(Socket, Data) ->
-    gen_server:call(?MODULE, {send, Socket, Data}).
-recv(Socket) ->
-    gen_server:call(?MODULE, {recv, Socket}).
+
+%%--------------------------------------------------------------------
+%% @doc Set socket options.
+%% @spec (Socket::zmq_socket(), Options) -> ok | {error, Reason}
+%%          Options = [{zmq_sockopt(), Value}]
+%% @end
+%%--------------------------------------------------------------------
+setsockopt(Socket, Opts) when is_integer(Socket), is_list(Opts) ->
+    gen_server:call(?MODULE, {setsockopt, Socket, Opts}).
+
+%%--------------------------------------------------------------------
+%% @doc Bind a 0MQ socket to address.
+%% @spec (Socket::zmq_socket(), Address) -> ok | {error, Reason}
+%%          Address = string() | binary()
+%% @end
+%%--------------------------------------------------------------------
+bind(Socket, Address) when is_integer(Socket), is_list(Address) ->
+    bind(Socket, list_to_binary(Address));
+bind(Socket, Address) when is_integer(Socket), is_binary(Address) ->
+    gen_server:call(?MODULE, {bind, Socket, Address});
+bind({Port, S}, Address) when is_integer(S), is_list(Address) ->
+    bind({Port, S}, list_to_binary(Address));
+bind({Port, S}, Address) when is_integer(S), is_binary(Address) ->
+    Msg = encode_bind(S, Address),
+    driver(Port, Msg).
+
+%%--------------------------------------------------------------------
+%% @doc Connect a 0MQ socket to address.
+%% @spec (Socket::zmq_socket(), Address) -> ok | {error, Reason}
+%%          Address = string() | binary()
+%% @end
+%%--------------------------------------------------------------------
+connect(Socket, Address) when is_integer(Socket), is_list(Address) ->
+    connect(Socket, list_to_binary(Address));
+connect(Socket, Address) when is_integer(Socket), is_binary(Address) ->
+    gen_server:call(?MODULE, {connect, Socket, Address});
+% Experimantal support of direct port communication
+connect({Port, S}, Address) when is_list(Address)->
+    connect({Port, S}, list_to_binary(Address));
+connect({Port, S}, Address) when is_binary(Address) ->
+    Msg = encode_connect(S, Address),
+    driver(Port, Msg).
+
+%%--------------------------------------------------------------------
+%% @doc Send a message to a given 0MQ socket.
+%% @spec (Socket::zmq_socket(), Msg::binary()) -> ok | {error, Reason}
+%% @end
+%%--------------------------------------------------------------------
+send(Socket, Data) when is_integer(Socket), is_binary(Data) ->
+    gen_server:call(?MODULE, {send, Socket, Data});
+% Experimantal support of direct port communication
+send({Port, S}, Data) ->
+    Msg = encode_msg_send(S, Data),
+    driver(Port, Msg).
+
+%%--------------------------------------------------------------------
+%% @doc Receive a message from a given 0MQ socket.
+%% @spec (Socket::zmq_socket()) -> {ok, binary()} | {error, Reason}
+%% @end
+%%--------------------------------------------------------------------
+recv(Socket) when is_integer(Socket) ->
+    gen_server:call(?MODULE, {recv, Socket});
+% Experimantal support of direct port communication
+recv({Port, S}) ->
+    Msg = encode_msg_recv(S),
+    driver(Port, Msg).
+
+%% Experimental functions for direct communications with port 
+%% bypassing serialization through ?MODULE server.
+
+port() ->
+    gen_server:call(?MODULE, port).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -114,8 +195,7 @@ recv(Socket) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle start.
+%% @doc Handle start.
 %%
 %% @spec init(Args) ->
 %%          {ok, State} |
@@ -125,22 +205,26 @@ recv(Socket) ->
 %%          ignore
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
+init([IoThreads]) ->
     process_flag(trap_exit, true),
-    SearchDir = filename:join(
-            [filename:dirname(code:which(?MODULE)), "..", "priv"]),
-    log("init, lib path:~p", [SearchDir]),
-    case erl_ddll:load(SearchDir, atom_to_list(?DRIVER_NAME)) of
-	    ok ->
-	        {ok, #state{port=open_port({spawn, ?DRIVER_NAME}, [binary])}};
-        {error, Reason} ->
-            {stop, {error, Reason}}
+    DirName = re:replace(filename:dirname(code:which(?MODULE)), 
+                         "/?[^/]+/\\.\\.", "", [{return,list}]),
+    SearchDir = filename:join(filename:dirname(DirName), "priv"),
+    ?log("init, lib path: ~s", [SearchDir]),
+    try erl_ddll:load(SearchDir, ?DRIVER_NAME) of
+	ok ->
+        Port = open_port({spawn_driver, ?DRIVER_NAME}, [binary]),
+        init_context(Port, IoThreads),
+	    {ok, #state{port=Port}};
+    {error, Reason} ->
+        throw(erl_ddll:format_error(Reason))
+    catch _:Error ->
+        {stop, Error}
     end.
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle synchronous call.
+%% @doc Handle synchronous call.
 %%
 %% @spec handle_call(Request, From, State) ->
 %%          {reply, Reply, NewState} |
@@ -153,105 +237,67 @@ init([]) ->
 %%          {stop, Reason, NewState}
 %% @end
 %%-------------------------------------------------------------------
-handle_call({init, AppThreads, IoThreads, Flags}, _From, State) ->
-    log("~p, app threads:~B io threads:~B",
-        [init, AppThreads, IoThreads]),
-    Message = <<(?ZMQ_INIT):32, AppThreads:32, IoThreads:32, Flags:32>>,
-    Reply = driver(State#state.port, Message),
-    {reply, Reply, State};
 
-handle_call({term}, _From, State) ->
-    log("~p", [term]),
-    Message = <<(?ZMQ_TERM):32>>,
-    Reply = driver(State#state.port, Message),
-    {reply, Reply, State};
+% No need to support context termination - context allocation
+% is handled on port creation, and the resource will be 
+% automatically reclaimed upon death of the port driver.  
+%handle_call({term}, _From, State) ->
+%    ?log("~p", [term]),
+%    Message = <<(?ZMQ_TERM):8>>,
+%    Reply = driver(State#state.port, Message),
+%    {reply, Reply, State};
 
-handle_call({socket, Type}, _From, State)
-    when is_atom(Type) ->
-        log("~p, type:~s", [socket, Type]),
-        Message =
-        case Type of
-            zmq_p2p -> <<(?ZMQ_SOCKET):32, (?ZMQ_P2P):32>>;
-            zmq_pub -> <<(?ZMQ_SOCKET):32, (?ZMQ_PUB):32>>;
-            zmq_sub -> <<(?ZMQ_SOCKET):32, (?ZMQ_SUB):32>>;
-            zmq_req -> <<(?ZMQ_SOCKET):32, (?ZMQ_REQ):32>>;
-            zmq_rep -> <<(?ZMQ_SOCKET):32, (?ZMQ_REP):32>>;
-            zmq_xreq -> <<(?ZMQ_SOCKET):32, (?ZMQ_XREQ):32>>;
-            zmq_xrep -> <<(?ZMQ_SOCKET):32, (?ZMQ_XREP):32>>;
-            zmq_upstream -> <<(?ZMQ_SOCKET):32, (?ZMQ_UPSTREAM):32>>;
-            zmq_downstream -> <<(?ZMQ_SOCKET):32, (?ZMQ_DOWNSTREAM):32>>;
-            other -> {error, "Unknown socket type"}
+handle_call({socket, Type, Options}, _From, #state{port=Port} = State) ->
+    ?log("~p, type:~s options:~p", [socket, Type, Options]),
+    try
+        [check_sockopt({O, V}) || {O,V} <- Options],
+        Msg     = encode_msg_socket(Type),
+        {ok, S} = driver(Port, Msg),
+        case driver(Port, encode_sock_opts(S, Options)) of
+        ok -> 
+            ok;
+        {error, Why} ->
+            driver(Port, encode_close(S)),
+            throw(Why)
         end,
-        Reply = driver(State#state.port, Message),
-        {reply, Reply, State};
+        {reply, {ok, S}, State}
+    catch _:Error ->
+        {reply, {error, Error}, State}
+    end;
 
-handle_call({close, Socket}, _From, State)
-    when is_binary(Socket) ->
-        log("~p", [close]),
-        Message = <<(?ZMQ_CLOSE):32, Socket/binary>>,
-        Reply = driver(State#state.port, Message),
-        {reply, Reply, State};
+handle_call({close, Socket}, _From, State) ->
+    ?log("~p", [close]),
+    do_call(State, encode_close(Socket));
 
-% FIXME Doesn't support getsockopt yet.
-handle_call({sockopt, _Command, {Socket, Option, Value}}, _From, State)
-    when is_binary(Socket) ->
-        log("~p", [socketopt]),
-        Message =
-        case Option of 
-            zmq_hwm -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_HWM):32, Value/binary>>;
-            zmq_lwn -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_LWM):32, Value/binary>>;
-            zmq_swap -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_SWAP):32, Value/binary>>;
-            zmq_affinity -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_AFFINITY):32, Value/binary>>;
-            zmq_identity -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_IDENTITY):32, Value/binary>>;
-            zmq_subscribe -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_SUBSCRIBE):32, Value/binary>>;
-            zmq_unsubscibe -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_UNSUBSCRIBE):32, Value/binary>>;
-            zmq_rate -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_RATE):32, Value/binary>>;
-            zmq_racovery_ivl -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_RECOVERY_IVL):32, Value/binary>>;
-            zmq_mcast_loop -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_MCAST_LOOP):32, Value/binary>>;
-            zmq_rcvbuf -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_RCVBUF):32, Value/binary>>;
-            zmq_rcvmore -> <<(?ZMQ_SETSOCKOPT):32, Socket/binary, (?ZMQ_RCVMORE):32, Value/binary>>;
-            other -> {error, "Unknown socket type"}
-        end,
-        Reply = driver(State#state.port, Message),
-        {reply, Reply, State};
+handle_call({setsockopt, Socket, Options}, _From, State) ->
+    ?log("~p", [socketopt]),
+    do_call(State, encode_sock_opts(Socket, Options));
 
-handle_call({bind, Socket, Address}, _From, State)
-    when is_binary(Socket) ->
-        log("~p addr:~s", [bind, binary_to_term(Address)]),
-        Message = <<(?ZMQ_BIND):32, Socket/binary, Address/binary>>,
-        Reply = driver(State#state.port, Message),
-        {reply, Reply, State};
+handle_call({bind, Socket, Address}, _From, State) ->
+    ?log("~p addr:~s", [bind, binary_to_list(Address)]),
+    do_call(State, encode_bind(Socket, Address));
 
-handle_call({connect, Socket, Address}, _From, State)
-    when is_binary(Socket) and is_binary(Address) ->
-        log("~p addr:~s", [connect, binary_to_term(Address)]),
-        Message = <<(?ZMQ_CONNECT):32, Socket/binary, Address/binary>>,
-        Reply = driver(State#state.port, Message),
-        {reply, Reply, State};
+handle_call({connect, Socket, Address}, _From, State) ->
+    ?log("~p addr:~s", [connect, binary_to_list(Address)]),
+    do_call(State, encode_connect(Socket, Address));
 
-handle_call({send, Socket, Data}, _From, State)
-    when is_binary(Socket) and is_binary(Data) ->
-        log("~p", [send]),
-        Message = <<(?ZMQ_SEND):32, Socket/binary, Data/binary>>,
-        Reply = driver(State#state.port, Message),
-        {reply, Reply, State};
+handle_call({send, Socket, Data}, _From, State) ->
+    ?log("~p", [send]),
+    do_call(State, encode_msg_send(Socket, Data));
 
-handle_call({recv, Socket}, _From, State)
-    when is_binary(Socket) ->
-        log("~p", [recv]),
-        Message = <<(?ZMQ_RECV):32, Socket/binary>>,
-        Reply = driver(State#state.port, Message),
-        {reply, Reply, State};
+handle_call({recv, Socket}, _From, State) ->
+    ?log("~p", [recv]),
+    do_call(State, encode_msg_recv(Socket));
 
-handle_call(_Request, _From, State) ->
-    log("~p", ['unknown request']),
-    Reply = {error, unkown_call},
-    {reply, Reply, State}.
+handle_call(port, _From, #state{port = Port} = State) ->
+    {reply, Port, State};
+
+handle_call(Request, _From, State) ->
+    {stop, {unknown_call, Request}, State}.
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle asynchronous call.
+%% @doc Handle asynchronous call.
 %%
 %% @spec handle_cast(Msg, State) ->
 %%          {noreply, NewState} |
@@ -260,13 +306,12 @@ handle_call(_Request, _From, State) ->
 %%          {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(Msg, State) ->
+    {stop, {unknown_cast, Msg}, State}.
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle timeout.
+%% @doc Handle message.
 %%
 %% @spec handle_info(Info, State) ->
 %%          {noreply, NewState} |
@@ -276,12 +321,12 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(_Info, State) ->
+    ?log("unhandled message: ~p\n", [_Info]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle termination/shutdown.
+%% @doc Handle termination/shutdown.
 %%
 %% @spec terminate(Reason, State) -> void()
 %% @end
@@ -292,8 +337,7 @@ terminate(_Reason, State) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle code change.
+%% @doc Handle code change.
 %%
 %% @spec code_change(OldVsn, State, Extra) -> 
 %%          {ok, NewState}
@@ -302,15 +346,123 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+%%--------------------------------------------------------------------
+%% @doc Format error atom returned by the driver.
+%% @spec (Code::atom()) -> string()
+%% @end
+%%--------------------------------------------------------------------
+format_error(enotsup)           -> "Not supported";
+format_error(eprotonosupport)   -> "Protocol not supported";
+format_error(enobufs)           -> "No buffer space available";
+format_error(enetdown)          -> "Network is down";
+format_error(eaddrinuse)        -> "Address in use";
+format_error(eaddrnotavail)     -> "Address not available";
+format_error(emthread)          -> "Number of preallocated application threads exceeded";
+format_error(efsm)              -> "Operation cannot be accomplished in current state";
+format_error(enocompatproto)    -> "The protocol is not compatible with the socket type";
+format_error(E) when is_atom(E) -> inet:format_error(E);
+format_error(E) when is_list(E) -> E;
+format_error(E) when is_tuple(E)-> io_lib:format("~p", [E]).
+
 %%%===================================================================
-%%% zmq_drv port wrapper.
+%%% Internal functions
 %%%===================================================================
+
+init_context(Port, IoThreads) ->
+    % For now the driver only 1 app_thread and multiplexing using poll()
+    AppThreads = 1,
+    IntFlag    = ?ZMQ_POLL, 
+    ?log("~p, app threads:~B io threads:~B",
+        [init, AppThreads, IoThreads]),
+    Message = <<(?ZMQ_INIT):8, AppThreads:32, IoThreads:32, IntFlag:32>>,
+    case driver(Port, Message) of
+        ok              -> ok;
+        {error, Error}  -> throw(format_error(Error))
+    end.
+
+encode_msg_socket(Type) ->
+    case Type of
+        p2p         -> <<(?ZMQ_SOCKET):8, (?ZMQ_P2P):8>>;
+        pub         -> <<(?ZMQ_SOCKET):8, (?ZMQ_PUB):8>>;
+        sub         -> <<(?ZMQ_SOCKET):8, (?ZMQ_SUB):8>>;
+        req         -> <<(?ZMQ_SOCKET):8, (?ZMQ_REQ):8>>;
+        rep         -> <<(?ZMQ_SOCKET):8, (?ZMQ_REP):8>>;
+        xreq        -> <<(?ZMQ_SOCKET):8, (?ZMQ_XREQ):8>>;
+        xrep        -> <<(?ZMQ_SOCKET):8, (?ZMQ_XREP):8>>;
+        upstream    -> <<(?ZMQ_SOCKET):8, (?ZMQ_UPSTREAM):8>>;
+        downstream  -> <<(?ZMQ_SOCKET):8, (?ZMQ_DOWNSTREAM):8>>;
+        _           -> throw({unknown_sock_type, Type})
+    end.
+
+encode_close(Socket) ->
+    <<(?ZMQ_CLOSE):8, Socket:32>>.
+
+encode_sock_opts(Socket, Options) when length(Options) =< 255 ->
+    Opts = lists:map(fun({O, Value}) ->
+        V = check_sockopt({O, Value}),
+        case O of 
+            hwm         -> <<?ZMQ_HWM,          8, V:64/native>>;
+            lwm         -> <<?ZMQ_LWM,          8, V:64/native>>;
+            swap        -> <<?ZMQ_SWAP,         8, V:64/native>>;
+            affinity    -> <<?ZMQ_AFFINITY,     8, V:64/native>>;
+            identity    -> <<?ZMQ_IDENTITY,     (byte_size(V)):8, V/binary>>;
+            subscribe   -> <<?ZMQ_SUBSCRIBE,    (byte_size(V)):8, V/binary>>;
+            unsubscribe -> <<?ZMQ_UNSUBSCRIBE,  (byte_size(V)):8, V/binary>>;
+            rate        -> <<?ZMQ_RATE,         8, V:64/native>>;
+            recovery_ivl-> <<?ZMQ_RECOVERY_IVL, 8, V:64/native>>;
+            mcast_loop  -> <<?ZMQ_MCAST_LOOP,   8, V:64/native>>;
+            sndbuf      -> <<?ZMQ_SNDBUF,       8, V:64/native>>;
+            rcvbuf      -> <<?ZMQ_RCVBUF,       8, V:64/native>>;
+            rcvmore     -> <<?ZMQ_RCVMORE,      8, V:64/native>>;
+            % Driver's socket options
+            active      -> <<?ZMQ_ACTIVE,       1, V>>;
+            _           -> throw({unknown_sock_option, O})
+        end
+    end, Options),
+    <<(?ZMQ_SETSOCKOPT):8, Socket:32, (length(Opts)):8, (list_to_binary(Opts))/binary>>.
+
+check_sockopt({hwm,           V}) when is_integer(V) -> V;
+check_sockopt({lwm,           V}) when is_integer(V) -> V;
+check_sockopt({swap,          V}) when is_integer(V) -> V;
+check_sockopt({affinity,      V}) when is_integer(V) -> V;
+check_sockopt({identity,      V}) when is_list(V),   length(V)    =< 255 -> list_to_binary(V);
+check_sockopt({identity,      V}) when is_binary(V), byte_size(V) =< 255 -> V;
+% Note that 0MQ doesn't limit the size of subscribe/unsubscribe options,
+% but we do for simplicity.
+check_sockopt({subscribe,     V}) when is_list(V),   length(V)    =< 255 -> list_to_binary(V);
+check_sockopt({subscribe,     V}) when is_binary(V), byte_size(V) =< 255 -> V;
+check_sockopt({unsubscribe,   V}) when is_list(V),   length(V)    =< 255 -> list_to_binary(V);
+check_sockopt({unsubscribe,   V}) when is_binary(V), byte_size(V) =< 255 -> V;
+check_sockopt({rate,          V}) when is_integer(V) -> V;
+check_sockopt({recovery_ivl,  V}) when is_integer(V) -> V;
+check_sockopt({mcast_loop, true})                    -> 1;
+check_sockopt({mcast_loop,false})                    -> 0;
+check_sockopt({sndbuf,        V}) when is_integer(V) -> V;
+check_sockopt({rcvbuf,        V}) when is_integer(V) -> V;
+check_sockopt({rcvmore,    true})                    -> 1;
+check_sockopt({rcvmore,   false})                    -> 0;
+check_sockopt({active,     true})                    -> 1;
+check_sockopt({active,    false})                    -> 0;
+check_sockopt(Option) -> throw({unknown_option, Option}).
+
+encode_bind(Socket, Address) ->
+    <<(?ZMQ_BIND):8, Socket:32, Address/binary>>.
+encode_connect(Socket, Address) ->
+    <<(?ZMQ_CONNECT):8, Socket:32, Address/binary>>.
+encode_msg_send(Socket, Data) ->
+    <<(?ZMQ_SEND):8, Socket:32, Data/binary>>.
+encode_msg_recv(Socket) ->
+    <<(?ZMQ_RECV):8, Socket:32>>.
+
+do_call(#state{} = State, Message) ->
+    Reply = driver(State#state.port, Message),
+    {reply, Reply, State}.
+
 driver(Port, Message) ->
-    log("port command ~p", [Message]),
+    ?log("port command ~p", [Message]),
     port_command(Port, Message),
     receive
 	    Data ->
 	        Data
-%    after infinity -> 
-%        timeout
     end.
+
