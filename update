@@ -3,7 +3,11 @@ git checkout master src vsn.mk
 cd src
 make docs
 cd ..
-rm -fr src vsn.mk
+git rm -fr src vsn.mk
 mv doc/* .
 rmdir doc
-git commit -a && git push origin
+if ! git commit -a ; then
+   exit 1
+fi
+
+git push origin
