@@ -1,8 +1,8 @@
 % This is an -*- erlang -*- file.
 
-{application, zmq,
+{application, @PACKAGE@,
  [{description, "ZeroMQ"},
-  {vsn, "%VSN%"},
+  {vsn, "@VERSION@"},
   {modules, [zmq]},
   {registered,[]},
   {applications, [kernel,stdlib]},

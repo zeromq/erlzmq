@@ -1,13 +1,10 @@
 TARBALL=zmq.tgz
 TARBALL_EXCLUDE=/tmp/exclude.xxx
 
-all clean:
-	@for d in c_src src; do \
-		${MAKE} --directory=$$d $@; \
-	done
+SUBDIRS = src
 
-docs:
-	@${MAKE} --directory=src $@
+#docs:
+#	@${MAKE} --directory=src $@
 
 gitdocs: docs
 	./bin/update_docs
