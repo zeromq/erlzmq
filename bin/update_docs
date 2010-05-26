@@ -18,6 +18,7 @@ rmdir doc
 set +e
 if ! git commit -a ; then
     git reset --hard
+    exit 1
 fi
 set -e
 
