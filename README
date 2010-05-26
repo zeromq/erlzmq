@@ -14,6 +14,11 @@ Examples
     You can run a server and any number of clients 
     in the same Erlang shell or on different nodes.
 
+Updating documentatin on GitHub
+    $ git checkout master    # make sure you are on master branch
+    $ make docs
+    $ ./bin/update_docs      # this will update gh-pages branch and commit changes to origin
+
 License
     BSD License
 
