@@ -9,6 +9,14 @@
 
 @doc
 
+<ol>
+<li>{@section Building}</li>
+<li>{@section Issue Tracking}</li>
+<li>{@section Architecture}</li>
+<li>{@section Known Limitations}</li>
+<li>{@section Usage}</li>
+</ol>
+
 == Building ==
 
 This implementation requires a feature of ZeroMQ that is
@@ -16,14 +24,24 @@ not yet included in the 2.0.6 release, and therefore ZeroMQ needs
 to be patched by applying the `zeromq-2.0.6.poll.patch' patch.
 
 ```
-  $ cp patches/zeromq-2.0.6.poll.patch /path/to/zeromq/source/
-  $ cd /path/to/zeromq/source/
+  # Get erlzmq and 0MQ projects
+
+  $ cd /tmp
+  $ git clone git://github.com/sustrik/zeromq2.git
+  $ git clone git://github.com/saleyn/erlzmq.git
+  
+  # Patch ZeroMQ
+    
+  $ cp erlzmq/patches/zeromq-2.0.6.poll.patch /tmp/zeromq2/
+  $ cd /tmp/zeromq2
   $ patch -p0 < zeromq-2.0.6.poll.patch
+  $ ./configure --with-pgm --prefix=/opt/zeromq-2.0.6
   $ make
   $ make install
+  
 '''
 
-After applying the patch modify the path in `c_src/Makefile' 
+After applying the patch to ZeroMQ modify the path in `/tmp/erlzmq/c_src/Makefile' 
 of the following variable to reflect location of ZeroMQ installation:
 
 ```
@@ -35,9 +53,14 @@ Make sure that Erlang is installed and `erl' is in the `PATH'.
 Run:
 
 ```
+  $ cd /tmp/erlzmq
   $ make
   $ make docs
 '''
+
+== Issue Tracking ==
+
+[http://www.zeromq.org/bindings:erlang]
 
 == Architecture ==
 
@@ -84,7 +107,7 @@ grow and eventually run out of memory.
 
 zmq:send/2 and zmq:recv/1 calls may block the owner Erlang process
 but will never block the Erlang VM.  The driver uses non-blocking
-calls to `zmq_send(2)' and `zmq_recv(1)' functions and will not
+calls to `zmq_send(3)' and `zmq_recv(3)' functions and will not
 deliver any result to the caller's pid until the message is 
 successfully sent or received.  Currently timeout option is not
 implemented on these two calls.
