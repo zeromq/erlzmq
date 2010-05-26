@@ -6,3 +6,4 @@ cd ..
 rm -fr src vsn.mk
 mv doc/* .
 rmdir doc
+git commit -a && git push origin
