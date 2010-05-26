@@ -1,0 +1,3 @@
+{application,zmq}.
+{packages,[]}.
+{modules,[zmq]}.
