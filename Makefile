@@ -9,6 +9,9 @@ all clean:
 docs:
 	@${MAKE} --directory=src $@
 
+gitdocs: docs
+	./bin/update_docs
+
 tar:
 	@echo Creating $(TARBALL)
 	@DIR=$${PWD##*/} && pushd .. > /dev/null && \
