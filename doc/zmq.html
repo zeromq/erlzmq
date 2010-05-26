@@ -1,0 +1,127 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module zmq</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module zmq</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>Erlang bindings for ZeroMQ.
+<p>Copyright © 2010 Dhammika Pathirana and Serge Aleynikov</p>
+
+<p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
+<p><b>Authors:</b> Dhammika Pathirana (<a href="mailto:dhammika at gmail dot com"><tt>dhammika at gmail dot com</tt></a>), Serge Aleynikov (<a href="mailto:saleyn at gmail dot com"><tt>saleyn at gmail dot com</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>Erlang bindings for ZeroMQ.
+  
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-zmq_socket">zmq_socket()</a></h3>
+<p><b>abstract datatype</b>: <tt>zmq_socket()</tt></p>
+<p>Opaque 0MQ socket type.</p>
+
+<h3 class="typedecl"><a name="type-zmq_sockopt">zmq_sockopt()</a></h3>
+<p><tt>zmq_sockopt() = {hwm, integer()} | {lwm, integer()} | {swap, integer()} | {affinity, integer()} | {identity, string()} | {subscribe, string()} | {unsubscibe, string()} | {rate, integer()} | {recovery_ivl, integer()} | {mcast_loop, <a href="#type-boolean">boolean()</a>} | {sndbuf, integer()} | {rcvbuf, integer()} | {rcvmore, <a href="#type-boolean">boolean()</a>} | {active, <a href="#type-boolean">boolean()</a>}</tt></p>
+<p>0MQ socket options. See 0MQ man pages for details.
+             One additional options <code>active</code> indicates to the driver
+             that incoming messages must be automatically delivered
+             to the process owner's mailbox instead of explicitely
+             requiring recv/1 call.</p>
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#bind-2">bind/2</a></td><td>Bind a 0MQ socket to address.</td></tr>
+<tr><td valign="top"><a href="#close-1">close/1</a></td><td>Close a 0MQ socket.</td></tr>
+<tr><td valign="top"><a href="#connect-2">connect/2</a></td><td>Connect a 0MQ socket to address.</td></tr>
+<tr><td valign="top"><a href="#format_error-1">format_error/1</a></td><td>Format error atom returned by the driver.</td></tr>
+<tr><td valign="top"><a href="#port-0">port/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#recv-1">recv/1</a></td><td>Receive a message from a given 0MQ socket.</td></tr>
+<tr><td valign="top"><a href="#send-2">send/2</a></td><td>Send a message to a given 0MQ socket.</td></tr>
+<tr><td valign="top"><a href="#setsockopt-2">setsockopt/2</a></td><td>Set socket options.</td></tr>
+<tr><td valign="top"><a href="#socket-1">socket/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#socket-2">socket/2</a></td><td>Create a 0MQ socket.</td></tr>
+<tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td>Equivalent to <a href="#start_link-1"><tt>start_link(1)</tt></a>.
+</td></tr>
+<tr><td valign="top"><a href="#start_link-1">start_link/1</a></td><td>Start the server.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="bind-2">bind/2</a></h3>
+<div class="spec">
+<p><tt>bind(Socket::<a href="#type-zmq_socket">zmq_socket()</a>, Address) -&gt; ok | {error, Reason}</tt>
+<ul class="definitions"><li><tt>Address = string() | binary()</tt></li>
+</ul></p>
+</div><p>Bind a 0MQ socket to address.</p>
+
+<h3 class="function"><a name="close-1">close/1</a></h3>
+<div class="spec">
+<p><tt>close(Socket::<a href="#type-zmq_socket">zmq_socket()</a>) -&gt; ok | {error, Reason}</tt></p>
+</div><p>Close a 0MQ socket.</p>
+
+<h3 class="function"><a name="connect-2">connect/2</a></h3>
+<div class="spec">
+<p><tt>connect(Socket::<a href="#type-zmq_socket">zmq_socket()</a>, Address) -&gt; ok | {error, Reason}</tt>
+<ul class="definitions"><li><tt>Address = string() | binary()</tt></li>
+</ul></p>
+</div><p>Connect a 0MQ socket to address.</p>
+
+<h3 class="function"><a name="format_error-1">format_error/1</a></h3>
+<div class="spec">
+<p><tt>format_error(Code::atom()) -&gt; string()</tt></p>
+</div><p>Format error atom returned by the driver.</p>
+
+<h3 class="function"><a name="port-0">port/0</a></h3>
+<div class="spec">
+<p><tt>port() -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="recv-1">recv/1</a></h3>
+<div class="spec">
+<p><tt>recv(Socket::<a href="#type-zmq_socket">zmq_socket()</a>) -&gt; {ok, binary()} | {error, Reason}</tt></p>
+</div><p>Receive a message from a given 0MQ socket.</p>
+
+<h3 class="function"><a name="send-2">send/2</a></h3>
+<div class="spec">
+<p><tt>send(Socket::<a href="#type-zmq_socket">zmq_socket()</a>, Msg::binary()) -&gt; ok | {error, Reason}</tt></p>
+</div><p>Send a message to a given 0MQ socket.</p>
+
+<h3 class="function"><a name="setsockopt-2">setsockopt/2</a></h3>
+<div class="spec">
+<p><tt>setsockopt(Socket::<a href="#type-zmq_socket">zmq_socket()</a>, Opts::Options) -&gt; ok | {error, Reason}</tt>
+<ul class="definitions"><li><tt>Options = [{<a href="#type-zmq_sockopt">zmq_sockopt()</a>, Value}]</tt></li>
+</ul></p>
+</div><p>Set socket options.</p>
+
+<h3 class="function"><a name="socket-1">socket/1</a></h3>
+<div class="spec">
+<p><tt>socket(Type) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="socket-2">socket/2</a></h3>
+<div class="spec">
+<p><tt>socket(Type, Options) -&gt; {ok, Socket::<a href="#type-zmq_socket">zmq_socket()</a>} | {error, Reason}</tt>
+<ul class="definitions"><li><tt>Type = p2p | pub | sub | req | rep | xreq | xrep | upstream | downstream</tt></li>
+<li><tt>Options = [Option]</tt></li>
+<li><tt>Option = {active, <a href="#type-boolean">boolean()</a>} | {<a href="#type-zmq_sockopt">zmq_sockopt()</a>, Value}</tt></li>
+</ul></p>
+</div><p>Create a 0MQ socket.</p>
+
+<h3 class="function"><a name="start_link-0">start_link/0</a></h3>
+<div class="spec">
+<p><tt>start_link() -&gt; any()</tt></p>
+</div><p>Equivalent to <a href="#start_link-1"><tt>start_link(1)</tt></a>.</p>
+
+
+<h3 class="function"><a name="start_link-1">start_link/1</a></h3>
+<div class="spec">
+<p><tt>start_link(IoThreads) -&gt; {ok, Pid} | {error, Error} | ignore</tt></p>
+</div><p>Start the server.</p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, May 25 2010, 23:39:44.</i></p>
+</body>
+</html>
