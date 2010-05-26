@@ -1,0 +1,8 @@
+#!/bin/sh
+git checkout master src vsn.mk
+cd src
+make docs
+cd ..
+rm -fr src vsn.mk
+mv doc/* .
+rmdir doc
