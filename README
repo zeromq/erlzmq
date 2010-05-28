@@ -1,8 +1,17 @@
 Erlang bindings for ZeroMQ (http://www.zeromq.org).
 
-Generate documentation by running "make docs".
+Building
+    $ ./bootstrap
+    $ ./configure --with-zeromq=/path/to/zeromq
+    $ make
+    $ make docs
 
-See doc/index.html for full documentation.
+Documentation
+    See doc/index.html for full documentation.
+
+Updating documentatin on GitHub
+    $ git checkout master   # make sure you are on master branch
+    $ make gitdocs          # this will update gh-pages branch and commit changes to origin
 
 Examples
     PUB/SUB zmq_pubserver/zmq_subclient
@@ -13,10 +22,6 @@ Examples
 
     You can run a server and any number of clients 
     in the same Erlang shell or on different nodes.
-
-Updating documentatin on GitHub
-    $ git checkout master   # make sure you are on master branch
-    $ make gitdocs          # this will update gh-pages branch and commit changes to origin
 
 License
     BSD License
