@@ -68,16 +68,13 @@ ERLANG_CHECK_RELEASE
 AC_ERLANG_SUBST_ERTS_VER
 
 dnl Determine directories for installation.
-dnl if test "x${prefix}" = "x"; then
+if test "x${prefix}" = "xNONE"; then
 	dnl Inside Erlang lib directory.
-dnl 	ERLANG_INSTALL_LIB_DIR="${ERLANG_LIB_DIR}"
-dnl else
+    AC_SUBST([PACKAGE_INSTALL_DIR], [${ERLANG_ERTS_DIR%/*}/lib/${PACKAGE}-${VERSION}])
+else
 	dnl Under $prefix
-dnl     ERLANG_INSTALL_LIB_DIR="${prefix}"
-dnl fi
-
-dnl AC_ERLANG_SUBST_INSTALL_LIB_DIR
-dnl AC_ERLANG_SUBST_INSTALL_LIB_SUBDIR([zmq], ${PACKAGE_VERSION})
+    AC_SUBST([PACKAGE_INSTALL_DIR], [${prefix}/${PACKAGE}-${VERSION}])
+fi
 
 AC_CHECK_HEADER([${ERLANG_DRV_INCLUDE}/erl_driver.h], [], [
     AC_MSG_ERROR([Could not find the 'erl_driver.h' header.
@@ -159,7 +156,8 @@ dnl ------------------------------------------------------------------
 AC_MSG_NOTICE([Erlang environment])
 
 dnl Check for erl_interface (used by port drivers).
-AC_CONFIG_FILES([Makefile c_src/Makefile src/Makefile src/zmq.app])
+AC_CONFIG_FILES([Makefile c_src/Makefile src/Makefile 
+                 ebin/zmq.app:src/zmq.app.in])
 AC_OUTPUT
 
 dnl --------------------------------------------------
@@ -167,7 +165,9 @@ dnl Configuration report
 dnl --------------------------------------------------
 
 echo
-AC_MSG_NOTICE([ == ${PACKAGE} ${PACKAGE_VERSION} ==])
+AC_MSG_NOTICE([    == Package: ${PACKAGE}-${VERSION} ==])
+echo
+AC_MSG_NOTICE([    Install dir:        ${PACKAGE_INSTALL_DIR}])
 echo
 AC_MSG_NOTICE([    C++ compiler:       ${CXX}])
 AC_MSG_NOTICE([    Erlang compiler:    ${ERLC}])

@@ -1,36 +1,42 @@
 ERL=@ERL@
 ERLC=@ERLC@
 DEBUG=@DEBUG@
+MKDIR_P=@MKDIR_P@
+INSTALL=@INSTALL@
+DIST_DIR=@PACKAGE_INSTALL_DIR@
 VSN=@PACKAGE_VERSION@
 ERL_FLAGS=@ERL_FLAGS@ -I../include
 ERL_SOURCES=$(wildcard *.erl)
 EBIN_DIR=../ebin
 DOC_DIR=../doc
 ERL_OBJECTS=$(ERL_SOURCES:%.erl=$(EBIN_DIR)/%.beam)
-DOC_FILES=$(DOC_DIR)/zmq.html
+DOC_FILES=$(addprefix $(DOC_DIR)/,index.html modules-frame.html \
+	overview-summary.html stylesheet.css zmq.html)
 
-all: $(ERL_OBJECTS) $(EBIN_DIR) $(EBIN_DIR)/zmq.app
+all: $(ERL_OBJECTS)
 
 $(EBIN_DIR)/%.beam: %.erl
 	erlc $(ERL_FLAGS) -o ../ebin $<
-
-$(EBIN_DIR)/zmq.app: zmq.app.in
-	@[ -f $(subst .in,,$<) ] || (echo "Rerun configure script!" && exit 1)
-	mv -f $(subst .in,,$<) $@
 
 clean:
 	rm -f $(ERL_OBJECTS)
 	rm -fr $(DOC_DIR)
 
 distclean: clean
-	rm -f $(EBIN_DIR)/zmq.app
 
 docs: $(DOC_DIR) $(DOC_FILES)
 
 $(EBIN_DIR) $(DOC_DIR):
-	mkdir $@
+	$(MKDIR_P) $@
 
 $(DOC_DIR)/zmq.html: zmq.erl overview.edoc
 	erl -noshell -run edoc_run application "'zmq'" '"."' \
 		'[{dir, "$(DOC_DIR)"}, {def, [{version, "$(VSN)"}]}]' -run init stop
 
+install:
+	@[ -d $(DOC_DIR) ] || (echo "Error: run 'make docs' first!" && exit 1)
+	$(MKDIR_P) $(DIST_DIR)/src $(DIST_DIR)/ebin $(DIST_DIR)/doc
+	$(INSTALL) ../src/*.erl $(DIST_DIR)/src/
+	$(INSTALL) ../ebin/*.{beam,app} $(DIST_DIR)/ebin/
+	$(INSTALL) ../doc/*.{css,html,png} $(DIST_DIR)/doc
+	$(INSTALL) ../{README,LICENSE} $(DIST_DIR)
