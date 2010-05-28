@@ -11,11 +11,14 @@
 
 <ol>
 <li>{@section Overview}</li>
+<li>{@section Downloading}</li>
 <li>{@section Building}</li>
 <li>{@section Issue Tracking}</li>
+<li>{@section Contributing}</li>
 <li>{@section Architecture}</li>
 <li>{@section Known Limitations}</li>
 <li>{@section Usage}</li>
+<li>{@section License}</li>
 </ol>
 
 == Overview ==
@@ -26,6 +29,14 @@ design patterns.  This project aims at interperability of Erlang with other
 ZeroMQ distributed clients that may be written in other languages.
 
 ZeroMQ project is found here: [http://zeromq.org]
+
+== Downloading ==
+
+Project location and git origin:
+<ul>
+<li>[http://github.com/saleyn/erlzmq]</li>
+<li>`git clone git://github.com/saleyn/erlzmq.git'</li>
+</ul>
 
 == Building ==
 
@@ -48,22 +59,21 @@ to be patched by applying the `zeromq-2.0.6.poll.patch' patch.
   $ ./configure --with-pgm --prefix=/opt/zeromq-2.0.6
   $ make
   $ make install
-  
 '''
 
-After applying the patch to ZeroMQ modify the path in `/tmp/erlzmq/c_src/Makefile' 
-of the following variable to reflect location of ZeroMQ installation:
+Erlzmq project comes with a bootstrap script that uses autotools to creare a
+configure script.  Below are the steps needed to build erlzmq given the location
+of ZeroMQ installation being `/opt/zeromq-2.0.6':
 
-```
-ZMQ_DIR=/opt/zeromq-2.0.6
-'''
-
-Make sure that Erlang is installed and `erl' is in the `PATH'.
+Make sure that Erlang is installed and `erl' is in the `PATH'. If it's not
+in the path, specify `--with-erlang=PATH' option for the configure script.
 
 Run:
 
 ```
   $ cd /tmp/erlzmq
+  $ ./bootstrap
+  $ ./configure --with-zeromq=/opt/zeromq-2.0.6
   $ make
   $ make docs
 '''
@@ -71,6 +81,22 @@ Run:
 == Issue Tracking ==
 
 [http://github.com/saleyn/erlzmq/issues]
+
+== Contributing ==
+
+When you make any changes to documentation, run the following script to 
+update documentation on the [http://saleyn.github.com/erlzmq] site:
+
+```
+  $ make gitdocs
+'''
+
+The following make target can be used to do a cleanup of all artifacts 
+of make and configure:
+
+```
+  $ make clean-bootstrap
+'''
 
 == Architecture ==
 
@@ -207,3 +233,6 @@ by using ^G, or in a separate OS shell:
 
 '''
 
+== License ==
+
+The project is released under BSD license.

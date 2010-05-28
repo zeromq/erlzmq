@@ -141,9 +141,9 @@ dnl ------------------------------------------------------------------
 
 AC_ARG_WITH([zeromq], 
     AC_HELP_STRING([--with-zeromq=PATH],
-    [set PATH to the installation of zeromq library]),
+    [set PATH to the installation of zeromq library [[default=/usr]]]),
     [ZEROMQ_LIB=${with_zeromq}],
-    [ZEROMQ_LIB=""])
+    [ZEROMQ_LIB="/usr"])
 
 AC_CHECK_HEADER([${ZEROMQ_LIB}/include/zmq.h], [], [
     AC_MSG_ERROR([Could not find the 'zmq.h' header.
@@ -173,8 +173,8 @@ AC_MSG_NOTICE([    C++ compiler:       ${CXX}])
 AC_MSG_NOTICE([    Erlang compiler:    ${ERLC}])
 AC_MSG_NOTICE([    Erlang erts dir:    ${ERLANG_ERTS_DIR}])
 AC_MSG_NOTICE([    Erlang erts ver:    ${ERLANG_ERTS_VER}])
-AC_MSG_NOTICE([    Erlang lib dir:     ${ERLANG_INSTALL_LIB_DIR}])
 AC_MSG_NOTICE([    erl_interface:      ${ERLANG_LIB_DIR_erl_interface}])
+AC_MSG_NOTICE([    ZeroMQ:             ${ZEROMQ_LIB}])
 
 echo
 AC_MSG_NOTICE([    Debug/warnings:     ${enable_debug}/${enable_warnings}])

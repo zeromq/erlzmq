@@ -12,6 +12,7 @@ config.h
 config.h.in
 config.log
 config.status
+config.cache
 configure
 ebin/zmq.app
 m4/version

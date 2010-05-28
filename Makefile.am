@@ -5,8 +5,8 @@ TARBALL_EXCLUDE=/tmp/exclude.xxx
 
 SUBDIRS = c_src src
 
-#docs:
-#	@${MAKE} --directory=src $@
+docs:
+	@${MAKE} --directory=src $@
 
 gitdocs: docs
 	./bin/update_docs
