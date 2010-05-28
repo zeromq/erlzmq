@@ -1,0 +1,4 @@
+#!/bin/sh
+
+sed 's/[^=]\+=//' ./vsn.mk > m4/version
+autoreconf --install
