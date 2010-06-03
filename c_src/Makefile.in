@@ -8,20 +8,21 @@ MKDIR_P=@MKDIR_P@
 INSTALL=@INSTALL@
 INST_DIR=../priv
 DIST_DIR=@PACKAGE_INSTALL_DIR@/$(notdir $(INST_DIR))
+LIBZMQ_SO=$(INST_DIR)/zmq_drv@LIB_EXT@
 
 zmq_drv_so_CXXFLAGS=-Wall $(if $(debug),-DZMQDRV_DEBUG) $(CXXFLAGS)
 zmq_drv_so_LDFLAGS=-shared -fPIC $(LDFLAGS) -lpthread
 
-all: $(INST_DIR) $(INST_DIR)/zmq_drv.so
+all: $(INST_DIR) $(LIBZMQ_SO)
 
 $(INST_DIR):
 	$(MKDIR_P) $@
 
-$(INST_DIR)/zmq_drv.so: zmq_drv.cpp
+$(LIBZMQ_SO): zmq_drv.cpp
 	$(CXX) -o $@ $< ${zmq_drv_so_CXXFLAGS} ${zmq_drv_so_LDFLAGS}
 
 clean:
-	rm -rf zmq_drv.o $(INST_DIR)/zmq_drv.so
+	-rm -rf zmq_drv.o $(LIBZMQ_SO)*
 
 distclean: clean
 	rm Makefile
@@ -29,5 +30,4 @@ distclean: clean
 install:
 	$(MKDIR_P) $(DIST_DIR) $(dir $(DIST_DIR))c_src
 	$(INSTALL) zmq_drv.{h,cpp} $(dir $(DIST_DIR))c_src/
-	$(INSTALL) $(INST_DIR)/zmq_drv.so $(DIST_DIR)/
-	$(INSTALL) $(INST_DIR)/zmq_drv.so $(DIST_DIR)/
+	$(INSTALL) $(LIBZMQ_SO) $(DIST_DIR)/

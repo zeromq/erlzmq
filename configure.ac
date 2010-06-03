@@ -1,5 +1,3 @@
-dnl AC_INIT([zmq], [0.0], [http://github.com/saleyn/erlzmq/issues])
-dnl AC_INIT([zmq], m4_normalize(esyscmd([. ./vsn.mk; echo ${VSN}])), [http://github.com/saleyn/erlzmq/issues])
 dnl Note that the `version' file needs to be created/deleted externally from vsn.mk
 AC_INIT([zmq], m4_normalize(m4_include(m4/version)), [http://github.com/saleyn/erlzmq/issues])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -21,6 +19,8 @@ dnl AM_ENABLE_SHARED
 
 dnl AC_PROG_LIBTOOL
 dnl AC_PATH_PROG(PKG_CONFIG, pkg-config, [AC_MSG_ERROR([pkg-config was not found!])])
+
+AC_CANONICAL_HOST
 
 dnl ------------------------------------------------------------------
 dnl Erlang environment.
@@ -95,10 +95,10 @@ if test "x${enable_debug}" = "xyes"; then
 	AC_DEFINE([DEBUG], [], [Enable debug])
     AC_SUBST([DEBUG], [1])
 	AC_SUBST([ERL_FLAGS], [+debug_info -Ddebug])
-	CXXFLAGS="-O0 -DDEBUG"
+	CXXFLAGS="-O0 -DDEBUG $CXXFLAGS"
 else
     AC_SUBST([ERL_FLAGS], [])
-	CXXFLAGS="-O3 -DNDEBUG"
+	CXXFLAGS="-O3 -DNDEBUG $CXXFLAGS"
 fi
 
 dnl Treat warnings as errors.
@@ -150,6 +150,27 @@ CXXFLAGS="${CXXFLAGS# } -I${with_zeromq}/include"
 LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq"
 
 dnl ------------------------------------------------------------------
+dnl OS specific tests.
+dnl ------------------------------------------------------------------
+
+case "${host_os}" in
+    *darwin*)
+	DARWIN_CXXFLAGS="-dynamiclib -Wl,-undefined -Wl,dynamic_lookup"
+        CXXFLAGS="-D_DARWIN_C_SOURCE $DARWIN_CXXFLAGS $CXXFLAGS"
+	AC_SUBST([LIB_EXT], [.dylib])
+	;;
+    *)
+	AC_SUBST([LIB_EXT], [.so]);;
+esac
+
+case $(uname -p) in
+    i386*)
+        CXXFLAGS="-m32 $CXXFLAGS";;
+    x86_64*)
+        CXXFLAGS="-m64 $CXXFLAGS";;
+esac
+
+dnl ------------------------------------------------------------------
 dnl Output.
 dnl ------------------------------------------------------------------
 
@@ -167,9 +188,11 @@ dnl --------------------------------------------------
 echo
 AC_MSG_NOTICE([    == Package: ${PACKAGE}-${VERSION} ==])
 echo
+AC_MSG_NOTICE([    Host OS:            ${host_os}])
 AC_MSG_NOTICE([    Install dir:        ${PACKAGE_INSTALL_DIR}])
 echo
 AC_MSG_NOTICE([    C++ compiler:       ${CXX}])
+AC_MSG_NOTICE([    CXXFLAGS:           ${CXXFLAGS}])
 AC_MSG_NOTICE([    Erlang compiler:    ${ERLC}])
 AC_MSG_NOTICE([    Erlang erts dir:    ${ERLANG_ERTS_DIR}])
 AC_MSG_NOTICE([    Erlang erts ver:    ${ERLANG_ERTS_VER}])
