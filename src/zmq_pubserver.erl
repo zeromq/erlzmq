@@ -7,14 +7,13 @@
 run() ->
     run(50, 1000).
 run(N, Delay) ->
-    zmq:start_link(),
     spawn(fun() ->
         case zmq:socket(pub, []) of
         {ok, Socket} -> 
             zmq:bind(Socket, "tcp://127.0.0.1:5550"),
             send(Socket, Delay, N);
         Other -> 
-            Other
+            io:format("~p error creating socket: ~p\n", [self(), Other])
         end
     end).
 

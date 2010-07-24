@@ -81,12 +81,6 @@ struct zmq_sock_info {
         if (next) next->prev = prev;
     }
 
-    void process_commands() {
-        zmq_app_thread_t app_thread;
-        zmq_getsockopt(socket, ZMQ_APP_THREAD, &app_thread, sizeof(app_thread));
-        zmq_process(app_thread);
-    }
-
     static void* operator new    (size_t sz) { return driver_alloc(sz); }
     static void  operator delete (void* p)   { driver_free(p); }
 };

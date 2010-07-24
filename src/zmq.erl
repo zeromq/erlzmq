@@ -48,7 +48,7 @@
 %% gen_server callbacks.
 -export([init/1,
          handle_call/3, handle_cast/2, handle_info/2,
-	     terminate/2, code_change/3]).
+         terminate/2, code_change/3]).
 
 -include("zmq.hrl").
 
@@ -79,7 +79,7 @@ socket(Type) when is_atom(Type) ->
 %%--------------------------------------------------------------------
 %% @doc Create a 0MQ socket.
 %% @spec (Type, Options) -> {ok, Socket::zmq_socket()} | {error, Reason}
-%%          Type = p2p | pub | sub | req | rep | 
+%%          Type = pair | pub | sub | req | rep | 
 %%                 xreq | xrep | upstream | downstream
 %%          Options = [Option]
 %%          Option  = {active, boolean()}
@@ -213,10 +213,10 @@ init([IoThreads]) ->
     SearchDir = filename:join(filename:dirname(DirName), "priv"),
     ?log("init, lib path: ~s", [SearchDir]),
     try erl_ddll:load(SearchDir, ?DRIVER_NAME) of
-	ok ->
+    ok ->
         Port = open_port({spawn_driver, ?DRIVER_NAME}, [binary]),
         init_context(Port, IoThreads),
-	    {ok, #state{port=Port}};
+        {ok, #state{port=Port}};
     {error, Reason} ->
         throw(erl_ddll:format_error(Reason))
     catch _:Error ->
@@ -358,7 +358,6 @@ format_error(enobufs)           -> "No buffer space available";
 format_error(enetdown)          -> "Network is down";
 format_error(eaddrinuse)        -> "Address in use";
 format_error(eaddrnotavail)     -> "Address not available";
-format_error(emthread)          -> "Number of preallocated application threads exceeded";
 format_error(efsm)              -> "Operation cannot be accomplished in current state";
 format_error(enocompatproto)    -> "The protocol is not compatible with the socket type";
 format_error(E) when is_atom(E) -> inet:format_error(E);
@@ -370,12 +369,8 @@ format_error(E) when is_tuple(E)-> io_lib:format("~p", [E]).
 %%%===================================================================
 
 init_context(Port, IoThreads) ->
-    % For now the driver only 1 app_thread and multiplexing using poll()
-    AppThreads = 1,
-    IntFlag    = ?ZMQ_POLL, 
-    ?log("~p, app threads:~B io threads:~B",
-        [init, AppThreads, IoThreads]),
-    Message = <<(?ZMQ_INIT):8, AppThreads:32, IoThreads:32, IntFlag:32>>,
+    ?log("~p, io threads:~B", [init, IoThreads]),
+    Message = <<(?ZMQ_INIT):8, IoThreads:32>>,
     case driver(Port, Message) of
         ok              -> ok;
         {error, Error}  -> throw(format_error(Error))
@@ -383,7 +378,7 @@ init_context(Port, IoThreads) ->
 
 encode_msg_socket(Type) ->
     case Type of
-        p2p         -> <<(?ZMQ_SOCKET):8, (?ZMQ_P2P):8>>;
+        pair        -> <<(?ZMQ_SOCKET):8, (?ZMQ_PAIR):8>>;
         pub         -> <<(?ZMQ_SOCKET):8, (?ZMQ_PUB):8>>;
         sub         -> <<(?ZMQ_SOCKET):8, (?ZMQ_SUB):8>>;
         req         -> <<(?ZMQ_SOCKET):8, (?ZMQ_REQ):8>>;
@@ -403,7 +398,6 @@ encode_sock_opts(Socket, Options) when length(Options) =< 255 ->
         V = check_sockopt({O, Value}),
         case O of 
             hwm         -> <<?ZMQ_HWM,          8, V:64/native>>;
-            lwm         -> <<?ZMQ_LWM,          8, V:64/native>>;
             swap        -> <<?ZMQ_SWAP,         8, V:64/native>>;
             affinity    -> <<?ZMQ_AFFINITY,     8, V:64/native>>;
             identity    -> <<?ZMQ_IDENTITY,     (byte_size(V)):8, V/binary>>;
@@ -414,7 +408,6 @@ encode_sock_opts(Socket, Options) when length(Options) =< 255 ->
             mcast_loop  -> <<?ZMQ_MCAST_LOOP,   8, V:64/native>>;
             sndbuf      -> <<?ZMQ_SNDBUF,       8, V:64/native>>;
             rcvbuf      -> <<?ZMQ_RCVBUF,       8, V:64/native>>;
-            rcvmore     -> <<?ZMQ_RCVMORE,      8, V:64/native>>;
             % Driver's socket options
             active      -> <<?ZMQ_ACTIVE,       1, V>>;
             _           -> throw({unknown_sock_option, O})
@@ -423,7 +416,6 @@ encode_sock_opts(Socket, Options) when length(Options) =< 255 ->
     <<(?ZMQ_SETSOCKOPT):8, Socket:32, (length(Opts)):8, (list_to_binary(Opts))/binary>>.
 
 check_sockopt({hwm,           V}) when is_integer(V) -> V;
-check_sockopt({lwm,           V}) when is_integer(V) -> V;
 check_sockopt({swap,          V}) when is_integer(V) -> V;
 check_sockopt({affinity,      V}) when is_integer(V) -> V;
 check_sockopt({identity,      V}) when is_list(V),   length(V)    =< 255 -> list_to_binary(V);
@@ -440,8 +432,6 @@ check_sockopt({mcast_loop, true})                    -> 1;
 check_sockopt({mcast_loop,false})                    -> 0;
 check_sockopt({sndbuf,        V}) when is_integer(V) -> V;
 check_sockopt({rcvbuf,        V}) when is_integer(V) -> V;
-check_sockopt({rcvmore,    true})                    -> 1;
-check_sockopt({rcvmore,   false})                    -> 0;
 check_sockopt({active,     true})                    -> 1;
 check_sockopt({active,    false})                    -> 0;
 check_sockopt(Option) -> throw({unknown_option, Option}).
@@ -463,7 +453,7 @@ driver(Port, Message) ->
     ?log("port command ~p", [Message]),
     port_command(Port, Message),
     receive
-	    Data ->
-	        Data
+        Data ->
+            Data
     end.
 

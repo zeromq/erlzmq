@@ -5,7 +5,7 @@
 -define('DRIVER_NAME', 'zmq_drv').
 
 %% ZMQ socket types.
--define('ZMQ_P2P',          0).
+-define('ZMQ_PAIR',         0).
 -define('ZMQ_PUB',          1).
 -define('ZMQ_SUB',          2).
 -define('ZMQ_REQ',          3).
@@ -17,7 +17,6 @@
 
 %% ZMQ socket options.
 -define('ZMQ_HWM',          1).
--define('ZMQ_LWM',          2).
 -define('ZMQ_SWAP',         3).
 -define('ZMQ_AFFINITY',     4).
 -define('ZMQ_IDENTITY',     5).
@@ -29,10 +28,8 @@
 -define('ZMQ_SNDBUF',      11).
 -define('ZMQ_RCVBUF',      12).
 -define('ZMQ_RCVMORE',     13).
+-define('ZMQ_FD',          14).
 -define('ZMQ_ACTIVE',     255).  % This is driver's socket option rather than 0MQ's
-
-%% ZMQ init options.
--define('ZMQ_POLL',         1).
 
 %% ZMQ send/recv options.
 -define('ZMQ_NOBLOCK',      1).

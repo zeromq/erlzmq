@@ -9,14 +9,13 @@ run(active,  N, Delay)  -> do_run(true,  N, Delay);
 run(passive, N, Delay)  -> do_run(false, N, Delay).
 
 do_run(Mode, N, Delay) when is_boolean(Mode), is_integer(N), is_integer(Delay) ->
-    zmq:start_link(),
     spawn(fun() ->
         case zmq:socket(req, [{active, Mode}]) of
         {ok, Socket} -> 
             zmq:connect(Socket, "tcp://127.0.0.1:5550"),
             reqrep(Mode, Socket, Delay, N);
         Other -> 
-            Other
+            io:format("~p error creating socket: ~p\n", [self(), Other])
         end
     end).
 

@@ -78,8 +78,11 @@ zmq_drv_t::~zmq_drv_t()
     zmq_pid_sockets.clear();
     zmq_fd_sockets.clear();
 
-    if (zmq_context)
+    if (zmq_context) {
+        zmqdrv_fprintf("calling zmq_term(context) ...\r\n");
         zmq_term(zmq_context);
+        zmqdrv_fprintf("terminated zmq context\r\n");
+    }
 }
 
 void zmq_drv_t::add_socket(zmq_sock_info* s)
@@ -200,7 +203,6 @@ static ErlDrvTermData error_atom(int err)
         case EADDRNOTAVAIL:     strcpy(errstr, "eaddrnotavail");    break;
         case ECONNREFUSED:      strcpy(errstr, "econnrefused");     break;
         case EINPROGRESS:       strcpy(errstr, "einprogress");      break;
-        case EMTHREAD:          strcpy(errstr, "emthread");         break;
         case EFSM:              strcpy(errstr, "efsm");             break;
         case ENOCOMPATPROTO:    strcpy(errstr, "enocompatproto");   break;
         default:
@@ -309,6 +311,7 @@ static void
 zmqdrv_stop(ErlDrvData handle)
 {
     delete reinterpret_cast<zmq_drv_t*>(handle);
+    zmqdrv_fprintf("driver stopped by pid\r\n");
 }
 
 static void
@@ -328,41 +331,20 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
 
     assert(si != it->second.end());
 
-    // FIXME: Currently 0MQ design assumes one thread owning 
-    // many 0MQ sockets - so we get the app_thread from the 
-    // first socket in the list of sockets associated with app_thread's
-    // signaling fd.  If 0MQ's implementation merges the app_thread
-    // concept with 0MQ socket object, this implementation would 
-    // have to call zmq_process in the loop for every 0MQ socket.
-    zmq_app_thread_t app_thread;
-    zmq_getsockopt((*si)->socket, ZMQ_APP_THREAD, &app_thread, sizeof(app_thread));
-
-    if (app_thread == NULL) {
-        zmqdrv_fprintf("warning: no app_thread for socket %p [sig_fd=%ld]\r\n",
-            (*si)->socket, (long)event);
-        // If this happens, there's something severely wrong with the socket
-        // structure - bail out by crashing the driver.
-        driver_failure_atom(drv->port, (char*)"no_application_thread_found");
-        return;
-    }
-
-    zmq_process(app_thread);
-
     for (; si != it->second.end(); ++si) {
         zmq_socket_t   s     = (*si)->socket;
         uint32_t       idx   = (*si)->idx;
         ErlDrvTermData owner = (*si)->owner;
         int            rc    = 0;
         uint32_t       events;
+        size_t         events_size = sizeof(events);
 
-        zmq_getsockopt(s, ZMQ_EVENTS | ZMQ_POLLIN, &events, sizeof(events));
+        zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size);
 
         while (((*si)->active_mode || (*si)->in_caller) && (events & ZMQ_POLLIN)) {
             msg_t msg;
 
-            do {
-                rc = zmq_recv(s, &msg, ZMQ_NOBLOCK);
-            } while (rc == -1 && zmq_errno() == EINTR);
+            rc = zmq_recv(s, &msg, ZMQ_NOBLOCK);
 
             ErlDrvTermData pid = (*si)->active_mode ? owner : (*si)->in_caller;
 
@@ -400,18 +382,16 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
 
             // FIXME: add error handling
             zmqdrv_fprintf("received %ld byte message relayed to pid %ld\r\n", zmq_msg_size(&msg), pid);
-            zmq_getsockopt(s, ZMQ_EVENTS | ZMQ_POLLIN, &events, sizeof(events));
+            zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size);
         }
     
-        zmq_getsockopt(s, ZMQ_EVENTS | ZMQ_POLLIN, &events, sizeof(events));
+        zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size);
 
         if ((*si)->out_caller != 0 && (events & ZMQ_POLLOUT)) {
             // There was a pending unwritten message on this socket.
             // Try to write it.  If the write succeeds/fails clear the ZMQ_POLLOUT
             // flag and notify the waiting caller of completion of operation.
-            do { 
-                rc = zmq_send(s, &(*si)->out_msg, ZMQ_NOBLOCK);
-            } while (rc == -1 && zmq_errno() == EINTR);
+            rc = zmq_send(s, &(*si)->out_msg, ZMQ_NOBLOCK);
 
             zmqdrv_fprintf("resending message %p (size=%ld) on socket %p (ret=%d)\r\n", 
                 zmq_msg_data(&(*si)->out_msg), zmq_msg_size(&(*si)->out_msg), s, rc);
@@ -519,24 +499,20 @@ zmqdrv_init(zmq_drv_t *drv, ErlIOVec *ev)
      * call to explicitely convert a term to external binary format.
      */
 
-    uint32_t app_threads;
     uint32_t io_threads; 
-    uint32_t flags; 
 
     ErlDrvBinary* input = ev->binv[1];
     char* bytes = input->orig_bytes;
-    app_threads = ntohl(*(uint32_t *)(bytes + 1));
-    io_threads  = ntohl(*(uint32_t *)(bytes + 5));
-    flags       = ntohl(*(uint32_t *)(bytes + 9));
+    io_threads  = ntohl(*(uint32_t *)(bytes + 1));
 
-    zmqdrv_fprintf("appthreads = %u, iothreads = %u\r\n", app_threads, io_threads);
+    zmqdrv_fprintf("iothreads = %u\r\n", io_threads);
 
     if (drv->zmq_context) {
         zmqdrv_error_code(drv, EBUSY);
         return;
     }
     
-    drv->zmq_context = (void *)zmq_init(app_threads, io_threads, flags);
+    drv->zmq_context = (void *)zmq_init(io_threads);
 
     if (!drv->zmq_context) {
         zmqdrv_error_code(drv, zmq_errno());
@@ -554,7 +530,11 @@ zmqdrv_term(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
-    if (zmq_term(drv->zmq_context) < 0) {
+    zmqdrv_fprintf("calling zmq_term(context) ...\r\n");
+    int rc = zmq_term(drv->zmq_context);
+    zmqdrv_fprintf("terminated zmq context\r\n");
+
+    if (rc < 0) {
         zmqdrv_error_code(drv, zmq_errno());
         return;
     }
@@ -576,17 +556,12 @@ zmqdrv_socket(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
-    // If the socket app_thread's signaler is not registered
-    // with driver's poller, perform that registration now.
-    void* app_thr; 
-    int   sig_fd;
-    zmq_getsockopt(s, ZMQ_APP_THREAD, &app_thr, sizeof(app_thr));
-    zmq_getsockopt(s, ZMQ_WAITFD,     &sig_fd,  sizeof(sig_fd));
+    int sig_fd;
+    size_t sig_size = sizeof(sig_fd);
+    zmq_getsockopt(s, ZMQ_FD, &sig_fd, &sig_size);
 
     if (sig_fd < 0) {
-        std::stringstream str;
-        str << "Invalid signaler (app_thread=" << app_thr << ')';
-        zmqdrv_error(drv, str.str().c_str());
+        zmqdrv_error(drv, "Invalid signaler");
         return;
     }
 
@@ -660,7 +635,6 @@ zmqdrv_setsockopt(zmq_drv_t *drv, ErlIOVec *ev)
 
         switch (option) {
             case ZMQ_HWM:           assert(optvallen == 8);  break;
-            case ZMQ_LWM:           assert(optvallen == 8);  break;
             case ZMQ_SWAP:          assert(optvallen == 8);  break;
             case ZMQ_AFFINITY:      assert(optvallen == 8);  break;
             case ZMQ_IDENTITY:      assert(optvallen < 256); break;
@@ -671,7 +645,6 @@ zmqdrv_setsockopt(zmq_drv_t *drv, ErlIOVec *ev)
             case ZMQ_MCAST_LOOP:    assert(optvallen == 8);  break;
             case ZMQ_SNDBUF:        assert(optvallen == 8);  break;
             case ZMQ_RCVBUF:        assert(optvallen == 8);  break;
-            //case ZMQ_RCVMORE:       assert(optvallen == 8);  break;
             case ZMQ_ACTIVE:        assert(optvallen == 1);  break;
         }
 
@@ -785,7 +758,8 @@ zmqdrv_send(zmq_drv_t *drv, ErlIOVec *ev)
 
 #ifdef ZMQDRV_DEBUG
     uint32_t events;
-    zmq_getsockopt(si->socket, ZMQ_EVENTS | ZMQ_POLLIN | ZMQ_POLLOUT, &events, sizeof(events));
+    size_t events_size = sizeof(events);
+    zmq_getsockopt(si->socket, ZMQ_EVENTS, &events, &events_size);
     zmqdrv_fprintf("sending %p [idx=%d] %lu bytes (events=%d)\r\n", si->socket, idx, size, events);
 #endif
 
@@ -834,8 +808,6 @@ zmqdrv_recv(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
-    si->process_commands();
-
     if (si->active_mode) {
         zmqdrv_error_code(drv, EINVAL);
         return;
@@ -849,7 +821,8 @@ zmqdrv_recv(zmq_drv_t *drv, ErlIOVec *ev)
     }
 
     uint32_t events;
-    zmq_getsockopt(si->socket, ZMQ_EVENTS | ZMQ_POLLIN, &events, sizeof(events));
+    size_t events_size = sizeof(events);
+    zmq_getsockopt(si->socket, ZMQ_EVENTS, &events, &events_size);
 
     if (events == 0)
         si->in_caller = driver_caller(drv->port);

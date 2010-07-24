@@ -9,7 +9,6 @@ run(active)  -> do_run(true);
 run(passive) -> do_run(false).
 
 do_run(Mode) ->
-    zmq:start_link(),
     spawn(fun() ->
         case zmq:socket(sub, [{active, Mode}, {subscribe, ""}]) of
         {ok, Socket} -> 
