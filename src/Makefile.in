@@ -10,8 +10,7 @@ ERL_SOURCES=$(wildcard *.erl)
 EBIN_DIR=../ebin
 DOC_DIR=../doc
 ERL_OBJECTS=$(ERL_SOURCES:%.erl=$(EBIN_DIR)/%.beam)
-DOC_FILES=$(addprefix $(DOC_DIR)/,index.html modules-frame.html \
-	overview-summary.html stylesheet.css zmq.html)
+DOC_FILES=$(addprefix $(DOC_DIR)/,zmq.html)
 
 all: $(ERL_OBJECTS)
 

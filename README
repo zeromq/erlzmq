@@ -4,7 +4,7 @@ Building
     The bindings work against the master branch of ZeroMQ:
     http://github.com/sustrik/zeromq2
 
-    $ git clone git@github.com:zeromq/erlzmq.git erlzmq
+    $ git clone git@github.com:zeromq/erlzmq.git
     $ cd erlzmq
     $ ./bootstrap
     $ ./configure --with-zeromq=/path/to/zeromq
