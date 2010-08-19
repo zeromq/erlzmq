@@ -41,7 +41,7 @@
 %% ZMQ API
 -export([start_link/0, start_link/1,
          socket/1, socket/2, close/1, setsockopt/2, 
-         bind/2, connect/2, send/2, recv/1, format_error/1]).
+         bind/2, connect/2, send/2, send/3, recv/1, format_error/1]).
 
 -export([port/0]).
 
@@ -161,15 +161,23 @@ connect({Port, S}, Address) when is_binary(Address) ->
     driver(Port, Msg).
 
 %%--------------------------------------------------------------------
+%% @equiv send(Socket::zmq_socket(), Msg::binary(), [])
+%% @end
+%%--------------------------------------------------------------------
+send(Socket, Data) ->
+    send(Socket, Data, []).
+
+%%--------------------------------------------------------------------
 %% @doc Send a message to a given 0MQ socket.
 %% @spec (Socket::zmq_socket(), Msg::binary()) -> ok | {error, Reason}
 %% @end
 %%--------------------------------------------------------------------
-send(Socket, Data) when is_integer(Socket), is_binary(Data) ->
-    gen_server:call(?MODULE, {send, Socket, Data});
+send(Socket, Data, Flags)
+        when is_integer(Socket), is_binary(Data), is_list(Flags) ->
+    gen_server:call(?MODULE, {send, Socket, Data, Flags});
 % Experimantal support of direct port communication
-send({Port, S}, Data) ->
-    Msg = encode_msg_send(S, Data),
+send({Port, S}, Data, Flags) ->
+    Msg = encode_msg_send(S, Data, Flags),
     driver(Port, Msg).
 
 %%--------------------------------------------------------------------
@@ -282,9 +290,9 @@ handle_call({connect, Socket, Address}, _From, State) ->
     ?log("~p addr:~s", [connect, binary_to_list(Address)]),
     do_call(State, encode_connect(Socket, Address));
 
-handle_call({send, Socket, Data}, _From, State) ->
+handle_call({send, Socket, Data, Flags}, _From, State) ->
     ?log("~p", [send]),
-    do_call(State, encode_msg_send(Socket, Data));
+    do_call(State, encode_msg_send(Socket, Data, Flags));
 
 handle_call({recv, Socket}, _From, State) ->
     ?log("~p", [recv]),
@@ -440,8 +448,18 @@ encode_bind(Socket, Address) ->
     <<(?ZMQ_BIND):8, Socket:32, Address/binary>>.
 encode_connect(Socket, Address) ->
     <<(?ZMQ_CONNECT):8, Socket:32, Address/binary>>.
-encode_msg_send(Socket, Data) ->
-    <<(?ZMQ_SEND):8, Socket:32, Data/binary>>.
+
+send_flags_to_int([]) -> 0;
+send_flags_to_int([H|T]) ->
+    send_flags_to_int(T) bor
+    case H of
+        sndmore -> 2;
+        _ -> throw({unknown_send_option, 0})
+    end.
+
+encode_msg_send(Socket, Data, Flags) ->
+    F = send_flags_to_int(Flags),
+    <<(?ZMQ_SEND):8, Socket:32, F:32, Data/binary>>.
 encode_msg_recv(Socket) ->
     <<(?ZMQ_RECV):8, Socket:32>>.
 

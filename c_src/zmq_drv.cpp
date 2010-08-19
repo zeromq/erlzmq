@@ -391,7 +391,7 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
             // There was a pending unwritten message on this socket.
             // Try to write it.  If the write succeeds/fails clear the ZMQ_POLLOUT
             // flag and notify the waiting caller of completion of operation.
-            rc = zmq_send(s, &(*si)->out_msg, ZMQ_NOBLOCK);
+            rc = zmq_send(s, &(*si)->out_msg, (*si)->out_flags | ZMQ_NOBLOCK);
 
             zmqdrv_fprintf("resending message %p (size=%ld) on socket %p (ret=%d)\r\n", 
                 zmq_msg_data(&(*si)->out_msg), zmq_msg_size(&(*si)->out_msg), s, rc);
@@ -748,8 +748,9 @@ zmqdrv_send(zmq_drv_t *drv, ErlIOVec *ev)
     char*          bytes = bin->orig_bytes;
     uint32_t       idx   = ntohl(*(uint32_t*)(bytes+1));
     zmq_sock_info* si    = drv->get_socket_info(idx);
-    void*          data  = (void *)(bytes + 5);
-    size_t         size  = bin->orig_size - 5;
+    uint32_t       flags = ntohl(*(uint32_t*)(bytes+5));
+    void*          data  = (void *)(bytes + 9);
+    size_t         size  = bin->orig_size - 9;
 
     if (idx > drv->zmq_socket_count || !si) {
         zmqdrv_error_code(drv, ENODEV);
@@ -779,7 +780,7 @@ zmqdrv_send(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
-    if (zmq_send(si->socket, &si->out_msg, ZMQ_NOBLOCK) == 0) {
+    if (zmq_send(si->socket, &si->out_msg, flags | ZMQ_NOBLOCK) == 0) {
         zmqdrv_ok(drv);
         zmqdrv_ready_input((ErlDrvData)drv, (ErlDrvEvent)si->fd);
     } else {

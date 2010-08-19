@@ -56,6 +56,7 @@ struct zmq_sock_info {
     int            fd;          // Signaling fd for this socket
     ErlDrvTermData in_caller;   // Caller's pid of the last recv() command in passive mode
     zmq_msg_t      out_msg;     // Pending message to be written to 0MQ socket
+    int            out_flags;   // Send flags for the pending message
     ErlDrvTermData out_caller;  // Caller's pid of the last send() command
                                 // if it resulted in EAGAIN error.
     bool           active_mode; // true  - messages are delivered to owner
@@ -65,7 +66,7 @@ struct zmq_sock_info {
 
     zmq_sock_info(zmq_socket_t _s, uint32_t _idx, ErlDrvTermData _owner, int _sig_fd)
         : socket(_s), idx(_idx), owner(_owner), fd(_sig_fd), in_caller(0)
-        , out_caller(0), active_mode(true), prev(NULL), next(NULL)
+        , out_flags(0), out_caller(0), active_mode(true), prev(NULL), next(NULL)
     {
         zmq_msg_init(&out_msg);
     }
