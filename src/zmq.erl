@@ -30,6 +30,9 @@
 %%%           to the process owner's mailbox instead of explicitely
 %%%           requiring recv/1 call.
 %%% @end
+%%% @type zmq_sendopt() = sndmore.
+%%%           Send options. See 0MQ man pages for details.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(zmq).
 -author("dhammika@gmail.com").
@@ -161,7 +164,7 @@ connect({Port, S}, Address) when is_binary(Address) ->
     driver(Port, Msg).
 
 %%--------------------------------------------------------------------
-%% @equiv send(Socket::zmq_socket(), Msg::binary(), [])
+%% @equiv send(S, Msg, [])
 %% @end
 %%--------------------------------------------------------------------
 send(Socket, Data) ->
@@ -169,7 +172,8 @@ send(Socket, Data) ->
 
 %%--------------------------------------------------------------------
 %% @doc Send a message to a given 0MQ socket.
-%% @spec (Socket::zmq_socket(), Msg::binary()) -> ok | {error, Reason}
+%% @spec (Socket::zmq_socket(), Msg::binary(), Flags) -> ok | {error, Reason}
+%%          Flags = [zmq_sendopt()]
 %% @end
 %%--------------------------------------------------------------------
 send(Socket, Data, Flags)
