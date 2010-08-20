@@ -43,7 +43,7 @@
 
 %% ZMQ API
 -export([start_link/0, start_link/1,
-         socket/1, socket/2, close/1, setsockopt/2, 
+         socket/1, socket/2, close/1, setsockopt/2, getsockopt/2,
          bind/2, connect/2, send/2, send/3, recv/1, format_error/1]).
 
 -export([port/0]).
@@ -129,6 +129,19 @@ close(Socket) when is_integer(Socket) ->
 %%--------------------------------------------------------------------
 setsockopt(Socket, Opts) when is_integer(Socket), is_list(Opts) ->
     gen_server:call(?MODULE, {setsockopt, Socket, Opts}).
+
+%%--------------------------------------------------------------------
+%% @doc Get socket option.
+%% @spec (Socket::zmq_socket(), Option) -> {ok, Value} | {error, Reason}
+%%          Option = zmq_sockopt()
+%% @end
+%%--------------------------------------------------------------------
+getsockopt(Socket, Option) when is_integer(Socket), is_atom(Option) ->
+    gen_server:call(?MODULE, {getsockopt, Socket, Option});
+% Experimantal support of direct port communication
+getsockopt({Port, S}, Option) when is_atom(Option)->
+    Msg = encode_getsockopt(S, Option),
+    driver(Port, Msg).
 
 %%--------------------------------------------------------------------
 %% @doc Bind a 0MQ socket to address.
@@ -285,6 +298,10 @@ handle_call({close, Socket}, _From, State) ->
 handle_call({setsockopt, Socket, Options}, _From, State) ->
     ?log("~p", [socketopt]),
     do_call(State, encode_sock_opts(Socket, Options));
+
+handle_call({getsockopt, Socket, Option}, _From, State) ->
+    ?log("~p", [getsockopt]),
+    do_call(State, encode_getsockopt(Socket, Option));
 
 handle_call({bind, Socket, Address}, _From, State) ->
     ?log("~p addr:~s", [bind, binary_to_list(Address)]),
@@ -448,6 +465,27 @@ check_sockopt({active,     true})                    -> 1;
 check_sockopt({active,    false})                    -> 0;
 check_sockopt(Option) -> throw({unknown_option, Option}).
 
+sockopt_to_int(Option) ->
+    case Option of 
+        hwm         -> ?ZMQ_HWM;
+        swap        -> ?ZMQ_SWAP;
+        affinity    -> ?ZMQ_AFFINITY;
+        identity    -> ?ZMQ_IDENTITY;
+        subscribe   -> ?ZMQ_SUBSCRIBE;
+        unsubscribe -> ?ZMQ_UNSUBSCRIBE;
+        rate        -> ?ZMQ_RATE;
+        recovery_ivl-> ?ZMQ_RECOVERY_IVL;
+        mcast_loop  -> ?ZMQ_MCAST_LOOP;
+        sndbuf      -> ?ZMQ_SNDBUF;
+        rcvbuf      -> ?ZMQ_RCVBUF;
+        rcvmore     -> ?ZMQ_RCVMORE;
+        _           -> throw({unknown_sock_option, Option})
+    end.
+
+encode_getsockopt(Socket, Option) ->
+    O = sockopt_to_int(Option),
+    <<(?ZMQ_GETSOCKOPT):8, Socket:32, O:32>>.
+
 encode_bind(Socket, Address) ->
     <<(?ZMQ_BIND):8, Socket:32, Address/binary>>.
 encode_connect(Socket, Address) ->
@@ -457,7 +495,7 @@ send_flags_to_int([]) -> 0;
 send_flags_to_int([H|T]) ->
     send_flags_to_int(T) bor
     case H of
-        sndmore -> 2;
+        sndmore -> ?ZMQ_SNDMORE;
         _ -> throw({unknown_send_option, 0})
     end.
 

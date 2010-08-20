@@ -666,6 +666,28 @@ zmqdrv_setsockopt(zmq_drv_t *drv, ErlIOVec *ev)
 static void 
 zmqdrv_getsockopt(zmq_drv_t *drv, ErlIOVec *ev)
 {
+    ErlDrvBinary*  bin   = ev->binv[1];
+    char*          bytes = bin->orig_bytes;
+    uint32_t       idx   = ntohl(*(uint32_t*)(bytes+1));
+    void*          s     = drv->get_zmq_socket(idx);
+    uint32_t       opt   = ntohl (*(uint32_t*)(bytes+sizeof(idx)+1));
+
+    if (opt == ZMQ_RCVMORE) {
+        int64_t val;
+        size_t valsz = sizeof (val);
+        if (zmq_getsockopt (s, opt, &val, &valsz) < 0) {
+            zmqdrv_error_code(drv, zmq_errno());
+            return;
+        }
+
+        ErlDrvTermData spec[] = {
+            ERL_DRV_ATOM,  am_ok,
+            ERL_DRV_ATOM, val ? driver_mk_atom((char*) "true") : driver_mk_atom((char*) "false"),
+            ERL_DRV_TUPLE, 2};
+        driver_send_term(drv->port, driver_caller(drv->port), spec, sizeof(spec)/sizeof(spec[0]));
+        return;
+    }
+
     zmqdrv_error(drv, "Not implemented");
 }
 
