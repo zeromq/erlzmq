@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------
  * Copyright (c) 2010 Dhammika Pathirana and Serge Aleynikov
  * <dhammika@gmail.com> wrote original C code, copyright disclaimed.
- * <saleyn@gmail.com> C++ rewrite, bug fixes and many enhancements 
+ * <saleyn@gmail.com> C++ rewrite, bug fixes and many enhancements
  * to the driver to support non-blocking I/O.
  * ------------------------------------------------------------------
  * See ../LICENSE for license details
@@ -23,7 +23,6 @@
 #else
 #define zmqdrv_fprintf(...)
 #endif
-
 #define INIT_ATOM(NAME) am_ ## NAME = (ErlDrvTermData)driver_mk_atom((char*)#NAME)
 
 /* Callbacks */
@@ -64,7 +63,7 @@ zmq_drv_t::~zmq_drv_t()
     for (zmq_pid_sockets_map_t::iterator it = zmq_pid_sockets.begin();
             it != zmq_pid_sockets.end(); ++it)
         driver_demonitor_process(port, &it->second.monitor);
- 
+
     for (zmq_fd_sockets_map_t::iterator it = zmq_fd_sockets.begin();
             it != zmq_fd_sockets.end(); ++it)
         driver_select(port, (ErlDrvEvent)it->first, ERL_DRV_READ, 0);
@@ -213,7 +212,7 @@ static ErlDrvTermData error_atom(int err)
     return driver_mk_atom(errstr);
 }
 
-static void 
+static void
 zmq_free_binary(void* /*data*/, void* hint)
 {
     ErlDrvBinary* bin = (ErlDrvBinary*)hint;
@@ -254,28 +253,27 @@ zmqdrv_error_code(zmq_drv_t *drv, int err)
 }
 
 static void
-zmqdrv_ok(zmq_drv_t *drv)
-{
-    ErlDrvTermData spec[] = {ERL_DRV_ATOM, am_ok};
-    driver_send_term(drv->port, driver_caller(drv->port), spec, sizeof(spec)/sizeof(spec[0]));
-}
-
-static void
 zmqdrv_ok(zmq_drv_t *drv, ErlDrvTermData pid)
 {
-    ErlDrvTermData spec[] = {ERL_DRV_ATOM, am_ok};
+  ErlDrvTermData spec[] = {ERL_DRV_ATOM, am_zok};
     driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
 }
 
-static void 
+static void
+zmqdrv_ok(zmq_drv_t *drv)
+{
+    zmqdrv_ok(drv, driver_caller(drv->port));
+}
+
+static void
 zmqdrv_binary_ok(zmq_drv_t *drv, ErlDrvTermData pid, void *data, size_t size)
 {
     /* Copy payload. */
-    ErlDrvTermData spec[] = 
-        {ERL_DRV_ATOM,   am_ok,
-         ERL_DRV_BUF2BINARY, (ErlDrvTermData)data, size,
-         ERL_DRV_TUPLE, 2};
-    
+    ErlDrvTermData spec[] =
+      {ERL_DRV_ATOM,   am_zok,
+       ERL_DRV_BUF2BINARY, (ErlDrvTermData)data, size,
+       ERL_DRV_TUPLE, 2};
+
     driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
 }
 
@@ -290,7 +288,7 @@ zmqdrv_binary_ok(zmq_drv_t *drv, void *data, size_t size) {
 
 int zmqdrv_driver_init(void)
 {
-    INIT_ATOM(ok);
+    INIT_ATOM(zok);
     INIT_ATOM(error);
     INIT_ATOM(eagain);
     INIT_ATOM(zmq);
@@ -324,7 +322,7 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
     zmq_fd_sockets_map_t::iterator it = drv->zmq_fd_sockets.find((long)event);
 
     zmqdrv_fprintf("input ready on [idx=%ld]\r\n", (long)event);
-    
+
     assert(it != drv->zmq_fd_sockets.end());
 
     zmq_sock_set_t::iterator si = it->second.begin();
@@ -373,7 +371,7 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
             } else {
                 // Return result {ok, binary()} to the waiting caller's pid
                 ErlDrvTermData spec[] = 
-                    {ERL_DRV_ATOM,   am_ok,
+                    {ERL_DRV_ATOM,   am_zok,
                      ERL_DRV_BUF2BINARY, (ErlDrvTermData)zmq_msg_data(&msg), zmq_msg_size(&msg),
                      ERL_DRV_TUPLE, 2};
                 driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
@@ -407,7 +405,7 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
                 zmqdrv_socket_error(drv, (*si)->out_caller, idx, zmq_errno());
                 (*si)->out_caller = 0;
             }
-        } 
+        }
 
         zmqdrv_fprintf("--> socket %p events=%d\r\n", s, events);
     }
@@ -581,7 +579,7 @@ zmqdrv_socket(zmq_drv_t *drv, ErlIOVec *ev)
 
     zmqdrv_fprintf("socket %p [idx=%d] owner=%ld\r\n", s, n, zsi->owner);
 
-    ErlDrvTermData spec[] = {ERL_DRV_ATOM,  am_ok,
+    ErlDrvTermData spec[] = {ERL_DRV_ATOM,  am_zok,
                              ERL_DRV_UINT,  n,
                              ERL_DRV_TUPLE, 2};
     driver_send_term(drv->port, zsi->owner, spec, sizeof(spec)/sizeof(spec[0]));
@@ -681,7 +679,7 @@ zmqdrv_getsockopt(zmq_drv_t *drv, ErlIOVec *ev)
         }
 
         ErlDrvTermData spec[] = {
-            ERL_DRV_ATOM,  am_ok,
+            ERL_DRV_ATOM,  am_zok,
             ERL_DRV_ATOM, val ? driver_mk_atom((char*) "true") : driver_mk_atom((char*) "false"),
             ERL_DRV_TUPLE, 2};
         driver_send_term(drv->port, driver_caller(drv->port), spec, sizeof(spec)/sizeof(spec[0]));

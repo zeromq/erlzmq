@@ -160,7 +160,7 @@ static void zmqdrv_recv(zmq_drv_t *zmq_drv, ErlIOVec *ev);
 static void zmqdrv_setsockopt(zmq_drv_t *zmq_drv, ErlIOVec *ev);
 static void zmqdrv_getsockopt(zmq_drv_t *zmq_drv, ErlIOVec *ev);
 
-static ErlDrvTermData am_ok;
+static ErlDrvTermData am_zok;
 static ErlDrvTermData am_error;
 static ErlDrvTermData am_eagain;
 static ErlDrvTermData am_zmq;

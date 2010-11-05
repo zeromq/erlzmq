@@ -513,7 +513,10 @@ driver(Port, Message) ->
     ?log("port command ~p", [Message]),
     port_command(Port, Message),
     receive
-        Data ->
-            Data
+        zok ->
+            ok;
+        {zok, Term} ->
+            {ok, Term};
+        Err = {error, _} ->
+            Err
     end.
-
