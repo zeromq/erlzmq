@@ -155,9 +155,9 @@ dnl ------------------------------------------------------------------
 
 case "${host_os}" in
     *darwin*)
-	DARWIN_CXXFLAGS="-dynamiclib -Wl,-undefined -Wl,dynamic_lookup"
+	DARWIN_CXXFLAGS="-dynamiclib -m64 -Wl,-undefined -Wl,dynamic_lookup"
         CXXFLAGS="-D_DARWIN_C_SOURCE $DARWIN_CXXFLAGS $CXXFLAGS"
-	AC_SUBST([LIB_EXT], [.dylib])
+	AC_SUBST([LIB_EXT], [.so])
 	;;
     *)
 	AC_SUBST([LIB_EXT], [.so]);;
