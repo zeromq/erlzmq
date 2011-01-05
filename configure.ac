@@ -147,7 +147,7 @@ AC_CHECK_HEADER([${ZEROMQ_LIB}/include/zmq.h], [], [
 Use the '--with-zeromq=PATH' option to specify location of ZeroMQ])])
 
 CXXFLAGS="${CXXFLAGS# } -I${with_zeromq}/include"
-LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq"
+LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq -Wl,-R${with_zeromq}/lib"
 
 dnl ------------------------------------------------------------------
 dnl OS specific tests.
@@ -193,6 +193,7 @@ AC_MSG_NOTICE([    Install dir:        ${PACKAGE_INSTALL_DIR}])
 echo
 AC_MSG_NOTICE([    C++ compiler:       ${CXX}])
 AC_MSG_NOTICE([    CXXFLAGS:           ${CXXFLAGS}])
+AC_MSG_NOTICE([    LDFLAGS:            ${LDFLAGS}])
 AC_MSG_NOTICE([    Erlang compiler:    ${ERLC}])
 AC_MSG_NOTICE([    Erlang erts dir:    ${ERLANG_ERTS_DIR}])
 AC_MSG_NOTICE([    Erlang erts ver:    ${ERLANG_ERTS_VER}])

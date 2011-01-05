@@ -165,4 +165,6 @@ static ErlDrvTermData am_error;
 static ErlDrvTermData am_eagain;
 static ErlDrvTermData am_zmq;
 static ErlDrvTermData am_msg;
+static ErlDrvTermData am_true;
+static ErlDrvTermData am_false;
 

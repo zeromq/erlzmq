@@ -293,6 +293,8 @@ int zmqdrv_driver_init(void)
     INIT_ATOM(eagain);
     INIT_ATOM(zmq);
     INIT_ATOM(msg);
+    INIT_ATOM(true);
+    INIT_ATOM(false);
     return 0;
 }
 
@@ -680,7 +682,7 @@ zmqdrv_getsockopt(zmq_drv_t *drv, ErlIOVec *ev)
 
         ErlDrvTermData spec[] = {
             ERL_DRV_ATOM,  am_zok,
-            ERL_DRV_ATOM, val ? driver_mk_atom((char*) "true") : driver_mk_atom((char*) "false"),
+            ERL_DRV_ATOM, (val ? am_true : am_false),
             ERL_DRV_TUPLE, 2};
         driver_send_term(drv->port, driver_caller(drv->port), spec, sizeof(spec)/sizeof(spec[0]));
         return;
