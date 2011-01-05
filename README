@@ -12,7 +12,8 @@ Building
     $ make docs
 
 Documentation
-    See doc/index.html for full documentation.
+    See http://zeromq.github.com/erlzmq for full documentation.
+    (Content uploaded from doc/index.html).
 
 Updating documentatin on GitHub
     $ git checkout master   # make sure you are on master branch
