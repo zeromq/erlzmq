@@ -40,11 +40,9 @@ Project location and git origin:
 
 == Building ==
 
-This implementation requires a feature of ZeroMQ that is
-not yet included in the main 2.0.7 repository, and therefore
-needs a version of ZeroMQ from Sustrik's repository:
+Obtain and build the latest version of zeromq:
 
-[http://github.com/sustrik/zeromq2]
+[http://github.com/zeromq/zeromq2]
 
 ```
   # Get and build 0MQ project
@@ -53,14 +51,14 @@ needs a version of ZeroMQ from Sustrik's repository:
   $ git clone git://github.com/sustrik/zeromq2.git zeromq
   
   $ cd zeromq
-  $ ./configure --with-pgm --prefix=/opt/zeromq-2.0.7
+  $ ./configure --with-pgm --prefix=/opt/zeromq-2.1.0
   $ make
   $ make install
 '''
 
 Erlzmq project comes with a bootstrap script that uses autotools to creare a
 configure script.  Below are the steps needed to build erlzmq given the location
-of ZeroMQ installation being `/opt/zeromq-2.0.7':
+of ZeroMQ installation being `/opt/zeromq-2.1.0':
 
 Make sure that Erlang is installed and `erl' is in the `PATH'. If it's not
 in the path, specify `--with-erlang=PATH' option for the configure script.
@@ -72,7 +70,7 @@ Run:
   $ git clone git@github.com:zeromq/erlzmq.git
   $ cd /tmp/erlzmq
   $ ./bootstrap
-  $ ./configure --with-zeromq=/opt/zeromq-2.0.7
+  $ ./configure --with-zeromq=/opt/zeromq-2.1.0
   $ make
   $ make docs
 '''
