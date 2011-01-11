@@ -1,863 +1,1151 @@
-/*
- * ------------------------------------------------------------------
- * Erlang bindings for ZeroMQ.
- * ------------------------------------------------------------------
- * Copyright (c) 2010 Dhammika Pathirana and Serge Aleynikov
- * <dhammika@gmail.com> wrote original C code, copyright disclaimed.
- * <saleyn@gmail.com> C++ rewrite, bug fixes and many enhancements
- * to the driver to support non-blocking I/O.
- * ------------------------------------------------------------------
- * See ../LICENSE for license details
- */
-
-#include <stdio.h>
-#include <string.h>
-#include <zmq.h>
-#include <ctype.h>
-#include <sstream>
-#include <assert.h>
+//==============================================================================
+// Erlang bindings for ZeroMQ.
+//
+// Copyright (c) 2010
+//
+//  Dhammika Pathirana <dhammika at gmail dot com>
+//     wrote original C code, copyright disclaimed.
+//
+//  Serge Aleynikov <saleyn at gmail dot com>
+//     C++ rewrite, bug fixes and many enhancements to the driver to support
+//     non-blocking I/O.
+//
+// Copyright (c) 2011
+//
+//  Chris Rempel <csrl at gmx dot com>
+//     Wrapped each socket connection in a gen_server, fixed a bunch of bugs and
+//     simplified code base
+//
+// See LICENSE for license details
+//==============================================================================
 #include "zmq_drv.h"
 
-#ifdef ZMQDRV_DEBUG
-#define zmqdrv_fprintf(...)   fprintf(stderr, __VA_ARGS__)
-#else
-#define zmqdrv_fprintf(...)
-#endif
-#define INIT_ATOM(NAME) am_ ## NAME = (ErlDrvTermData)driver_mk_atom((char*)#NAME)
+#include <errno.h>
+#include <assert.h>
+#include <netinet/in.h> // ntohl()
 
-/* Callbacks */
-static ErlDrvEntry zmq_driver_entry = {
-    zmqdrv_driver_init,                 /* init */
-    zmqdrv_start,                       /* startup (defined below) */
-    zmqdrv_stop,                        /* shutdown (defined below) */
-    NULL,                               /* output */
-    zmqdrv_ready_input,                 /* ready_input */
-    NULL,                               /* ready_output */
-    (char*)"zmq_drv",                   /* driver name */
-    NULL,                               /* finish */
-    NULL,                               /* handle */
-    NULL,                               /* control */
-    NULL,                               /* timeout */
-    zmqdrv_outputv,                     /* outputv, binary output */
-    NULL,                               /* ready_async */
-    NULL,                               /* flush */
-    NULL,                               /* call */
-    NULL,                               /* event */
-    ERL_DRV_EXTENDED_MARKER,            /* ERL_DRV_EXTENDED_MARKER */
-    ERL_DRV_EXTENDED_MAJOR_VERSION,     /* ERL_DRV_EXTENDED_MAJOR_VERSION */
-    ERL_DRV_EXTENDED_MAJOR_VERSION,     /* ERL_DRV_EXTENDED_MINOR_VERSION */
-    ERL_DRV_FLAG_USE_PORT_LOCKING,      /* ERL_DRV_FLAGs */
-    NULL,                               /* handle2 (reserved */
-    zmqdrv_process_exit,                /* process_exit */
-    NULL                                /* stop_select */
-};
+static ErlDrvTermData am_zmq_drv;
+static ErlDrvTermData am_ok;
+static ErlDrvTermData am_error;
+static ErlDrvTermData am_true;
+static ErlDrvTermData am_false;
+static ErlDrvTermData am_pollin;
+static ErlDrvTermData am_pollout;
+static ErlDrvTermData am_pollerr;
 
-/* Driver internal, C hook to driver API. */
-extern "C" DRIVER_INIT(zmq_drv)
+static ErlDrvTermData am_ebusy;
+static ErlDrvTermData am_enosys;
+static ErlDrvTermData am_eterm;
+static ErlDrvTermData am_efault;
+static ErlDrvTermData am_einval;
+static ErlDrvTermData am_eagain;
+static ErlDrvTermData am_enotsup;
+static ErlDrvTermData am_efsm;
+static ErlDrvTermData am_emthread;
+static ErlDrvTermData am_eprotonosupport;
+static ErlDrvTermData am_enocompatproto;
+static ErlDrvTermData am_eaddrinuse;
+static ErlDrvTermData am_eaddrnotavail;
+static ErlDrvTermData am_enodev;
+
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// Internal Functions
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static ErlDrvTermData
+error_atom(int err)
 {
-    return &zmq_driver_entry;
-}
-
-zmq_drv_t::~zmq_drv_t()
-{
-    for (zmq_pid_sockets_map_t::iterator it = zmq_pid_sockets.begin();
-            it != zmq_pid_sockets.end(); ++it)
-        driver_demonitor_process(port, &it->second.monitor);
-
-    for (zmq_fd_sockets_map_t::iterator it = zmq_fd_sockets.begin();
-            it != zmq_fd_sockets.end(); ++it)
-        driver_select(port, (ErlDrvEvent)it->first, ERL_DRV_READ, 0);
-
-    for (zmq_sock_info *it=zmq_sock_infos, *next=(it ? it->next : NULL); it; it = next) {
-        next = it->next;
-        delete (&*it);
-    }
-    zmq_sockets.clear();
-    zmq_idxs.clear();
-    zmq_pid_sockets.clear();
-    zmq_fd_sockets.clear();
-
-    if (zmq_context) {
-        zmqdrv_fprintf("calling zmq_term(context) ...\r\n");
-        zmq_term(zmq_context);
-        zmqdrv_fprintf("terminated zmq context\r\n");
-    }
-}
-
-void zmq_drv_t::add_socket(zmq_sock_info* s)
-{
-    // Insert the new socket info to the head of the list
-    if (zmq_sock_infos) zmq_sock_infos->prev = s;
-    s->next        = zmq_sock_infos;
-    zmq_sock_infos = s;
-
-    // Update map: idx -> socket
-    zmq_sockets[s->idx] = s;
-    // Update map: socket -> idx
-    zmq_idxs[s->socket] = s;
+    switch (err)
     {
-        // Update map: pid -> sockets
-        zmq_pid_sockets_map_t::iterator it = zmq_pid_sockets.find(s->owner);
-        if (it != zmq_pid_sockets.end())
-            it->second.sockets.insert(s);
-        else {
-            monitor_sockets_t ms;
-            driver_monitor_process(port, s->owner, &ms.monitor);
-            ms.sockets.insert(s);
-            zmq_pid_sockets[s->owner] = ms;
-        }
-    }
-    {
-        // Update map: fd -> sockets
-        zmq_fd_sockets_map_t::iterator it = zmq_fd_sockets.find(s->fd);
-        if (it != zmq_fd_sockets.end())
-            it->second.insert(s);
-        else {
-            zmq_sock_set_t set;
-            set.insert(s);
-            zmq_fd_sockets[s->fd] = set;
-            driver_select(port, (ErlDrvEvent)s->fd, ERL_DRV_READ, 1);
-            zmqdrv_fprintf("registered sig_fd(%d) with VM\r\n", s->fd);
-        }
-    }
-}
-
-int zmq_drv_t::del_socket(uint32_t idx)
-{
-    zmq_sock_info* s;
-    int ret = -1;
-
-    zmq_idx_socket_map_t::iterator it = zmq_sockets.find(idx);
-    if (it == zmq_sockets.end()) {
-        zmqdrv_fprintf("warning: socket info not found for idx %d\r\n", idx);
-        return ret;
-    }
-
-    s = it->second;
-    s->unlink();
-    if (s == zmq_sock_infos)
-        zmq_sock_infos = s->next;
-
-    zmq_sockets.erase(idx);
-    zmq_idxs.erase(s->socket);
-
-    {
-        // Remove the socket from a list of sockets owned by pid.
-        // If this was the last socket, demonitor pid.
-        zmq_pid_sockets_map_t::iterator it = zmq_pid_sockets.find(s->owner);
-        if (it != zmq_pid_sockets.end()) {
-            it->second.sockets.erase(s);
-            if (it->second.sockets.empty()) {
-                driver_demonitor_process(port, &it->second.monitor);
-                zmq_pid_sockets.erase(it);
-            }
-        }
-    }
-    {
-        zmq_fd_sockets_map_t::iterator it = zmq_fd_sockets.find(s->fd);
-        if (it != zmq_fd_sockets.end()) {
-            it->second.erase(s);
-            if (it->second.empty()) {
-                zmq_fd_sockets.erase(it->first);
-                driver_select(port, (ErlDrvEvent)it->first, ERL_DRV_READ, 0);
-                zmqdrv_fprintf("unregistered sig_fd(%d) with VM\r\n", it->first);
-            }
-        }
-    }
-
-    delete s;
-    return 0;
-}
-
-uint32_t zmq_drv_t::get_socket_idx(zmq_socket_t sock) const
-{
-    zmq_socket_idx_map_t::const_iterator it = zmq_idxs.find(sock);
-    return it == zmq_idxs.end() ? 0 : it->second->idx;
-}
-
-zmq_sock_info* zmq_drv_t::get_socket_info(uint32_t idx)
-{
-    zmq_idx_socket_map_t::const_iterator it = zmq_sockets.find(idx);
-    return it == zmq_sockets.end() ? NULL : it->second;
-}
-
-zmq_socket_t zmq_drv_t::get_zmq_socket(uint32_t idx) const
-{
-    zmq_idx_socket_map_t::const_iterator it = zmq_sockets.find(idx);
-    return it == zmq_sockets.end() ? NULL : it->second->socket;
-}
-
-static ErlDrvTermData error_atom(int err)
-{
-    char errstr[128];
-    char* s;
-    char* t;
-
-    switch (err) {
-        case ENOTSUP:           strcpy(errstr, "enotsup");          break;
-        case EPROTONOSUPPORT:   strcpy(errstr, "eprotonosupport");  break;
-        case ENOBUFS:           strcpy(errstr, "enobufs");          break;
-        case ENETDOWN:          strcpy(errstr, "enetdown");         break;
-        case EADDRINUSE:        strcpy(errstr, "eaddrinuse");       break;
-        case EADDRNOTAVAIL:     strcpy(errstr, "eaddrnotavail");    break;
-        case ECONNREFUSED:      strcpy(errstr, "econnrefused");     break;
-        case EINPROGRESS:       strcpy(errstr, "einprogress");      break;
-        case EFSM:              strcpy(errstr, "efsm");             break;
-        case ENOCOMPATPROTO:    strcpy(errstr, "enocompatproto");   break;
+        case EBUSY:           return am_ebusy;
+        case ENOSYS:          return am_enosys;
+        case ETERM:           return am_eterm;
+        case EFAULT:          return am_efault;
+        case EINVAL:          return am_einval;
+        case EAGAIN:          return am_eagain;
+        case ENOTSUP:         return am_enotsup;
+        case EFSM:            return am_efsm;
+        case EMTHREAD:        return am_emthread;
+        case EPROTONOSUPPORT: return am_eprotonosupport;
+        case ENOCOMPATPROTO:  return am_enocompatproto;
+        case EADDRINUSE:      return am_eaddrinuse;
+        case EADDRNOTAVAIL:   return am_eaddrnotavail;
+        case ENODEV:          return am_enodev;
         default:
-            for (s = erl_errno_id(err), t = errstr; *s; s++, t++)
-                *t = tolower(*s);
-            *t = '\0';
+            assert(true);
+            return am_error;
     }
-    return driver_mk_atom(errstr);
 }
 
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-zmq_free_binary(void* /*data*/, void* hint)
+reply_error(ErlDrvPort port, ErlDrvTermData pid, int err)
+{
+    // Return {zmq, Socket::integer(), {error, Reason::atom()}}
+    ErlDrvTermData spec[] = {
+        ERL_DRV_ATOM,   am_zmq_drv,
+        ERL_DRV_ATOM,   am_error,
+        ERL_DRV_ATOM,   error_atom(err),
+        ERL_DRV_TUPLE,  2,
+        ERL_DRV_TUPLE,  2
+    };
+    driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+reply_ok(ErlDrvPort port, ErlDrvTermData pid)
+{
+    ErlDrvTermData spec[] = {
+        ERL_DRV_ATOM,   am_zmq_drv,
+        ERL_DRV_ATOM,   am_ok,
+        ERL_DRV_TUPLE,  2
+    };
+    driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+reply_ok_binary(ErlDrvPort port, ErlDrvTermData pid, void *data, size_t size)
+{
+    /* Copy payload. */
+    ErlDrvTermData spec[] = {
+        ERL_DRV_ATOM,   am_zmq_drv,
+        ERL_DRV_ATOM,   am_ok,
+        ERL_DRV_BUF2BINARY, (ErlDrvTermData)data, size,
+        ERL_DRV_TUPLE,  2,
+        ERL_DRV_TUPLE,  2
+    };
+    driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+reply_ok_int(ErlDrvPort port, ErlDrvTermData pid, int num)
+{
+    ErlDrvTermData spec[] = {
+        ERL_DRV_ATOM,   am_zmq_drv,
+        ERL_DRV_ATOM,   am_ok,
+        ERL_DRV_INT,    num,
+        ERL_DRV_TUPLE,  2,
+        ERL_DRV_TUPLE,  2
+    };
+    driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+reply_ok_int64(ErlDrvPort port, ErlDrvTermData pid, int64_t num)
+{
+    ErlDrvTermData spec[] = {
+        ERL_DRV_ATOM,   am_zmq_drv,
+        ERL_DRV_ATOM,   am_ok,
+        ERL_DRV_INT64,  num,
+        ERL_DRV_TUPLE,  2,
+        ERL_DRV_TUPLE,  2
+    };
+    driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+reply_ok_uint64(ErlDrvPort port, ErlDrvTermData pid, uint64_t num)
+{
+    ErlDrvTermData spec[] = {
+        ERL_DRV_ATOM,   am_zmq_drv,
+        ERL_DRV_ATOM,   am_ok,
+        ERL_DRV_UINT64, num,
+        ERL_DRV_TUPLE,  2,
+        ERL_DRV_TUPLE,  2
+    };
+    driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+reply_ok_atom(ErlDrvPort port, ErlDrvTermData pid, ErlDrvTermData atom)
+{
+    ErlDrvTermData spec[] = {
+        ERL_DRV_ATOM,   am_zmq_drv,
+        ERL_DRV_ATOM,   am_ok,
+        ERL_DRV_ATOM,   atom,
+        ERL_DRV_TUPLE,  2,
+        ERL_DRV_TUPLE,  2
+    };
+    driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+reply_ok_events(ErlDrvPort port, ErlDrvTermData pid, uint32_t events)
+{
+    if ((ZMQ_POLLIN|ZMQ_POLLOUT) == events)
+    {
+        ErlDrvTermData spec[] = {
+            ERL_DRV_ATOM,   am_zmq_drv,
+            ERL_DRV_ATOM,   am_ok,
+            ERL_DRV_ATOM,   am_pollin,
+            ERL_DRV_ATOM,   am_pollout,
+            ERL_DRV_NIL,
+            ERL_DRV_LIST,   3,
+            ERL_DRV_TUPLE,  2,
+            ERL_DRV_TUPLE,  2
+        };
+        driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+    }
+    else
+    {
+        ErlDrvTermData spec[] = {
+            ERL_DRV_ATOM,   am_zmq_drv,
+            ERL_DRV_ATOM,   am_ok,
+            ERL_DRV_ATOM,   am_pollerr,
+            ERL_DRV_NIL,
+            ERL_DRV_LIST,   2,
+            ERL_DRV_TUPLE,  2,
+            ERL_DRV_TUPLE,  2
+        };
+        switch (events)
+        {
+            case ZMQ_POLLIN:  spec[5] = am_pollin;  break;
+            case ZMQ_POLLOUT: spec[5] = am_pollout; break;
+        }
+        driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+    }
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+send_events(ErlDrvPort port, ErlDrvTermData pid, uint32_t events)
+{
+    if ((ZMQ_POLLIN|ZMQ_POLLOUT) == events)
+    {
+        ErlDrvTermData spec[] = {
+            ERL_DRV_ATOM,   am_zmq_drv,
+            ERL_DRV_ATOM,   am_pollin,
+            ERL_DRV_ATOM,   am_pollout,
+            ERL_DRV_NIL,
+            ERL_DRV_LIST,   3,
+            ERL_DRV_TUPLE,  2
+        };
+        driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+    }
+    else
+    {
+        ErlDrvTermData spec[] = {
+            ERL_DRV_ATOM,   am_zmq_drv,
+            ERL_DRV_ATOM,   am_pollerr,
+            ERL_DRV_NIL,
+            ERL_DRV_LIST,   2,
+            ERL_DRV_TUPLE,  2
+        };
+        switch (events)
+        {
+            case ZMQ_POLLIN:  spec[3] = am_pollin;  break;
+            case ZMQ_POLLOUT: spec[3] = am_pollout; break;
+        }
+        driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+    }
+}
+
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ZeroMQ Callback Functions
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+zmqcb_free_binary(void* /*data*/, void* hint)
 {
     ErlDrvBinary* bin = (ErlDrvBinary*)hint;
     driver_free_binary(bin);
 }
 
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ZeroMQ Wrapper Functions
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-zmqdrv_socket_error(zmq_drv_t *drv, ErlDrvTermData pid, uint32_t idx, int err) {
-    // Return {zmq, Socket::integer(), {error, Reason::atom()}}
-    ErlDrvTermData spec[] =
-        {ERL_DRV_ATOM,  am_zmq,
-            ERL_DRV_UINT,  idx,
-            ERL_DRV_ATOM,  am_error,
-            ERL_DRV_ATOM,  error_atom(err),
-            ERL_DRV_TUPLE, 2,
-            ERL_DRV_TUPLE, 3};
-    driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+wrap_zmq_init(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
+{
+    int io_threads  = (int)ntohl(*(uint32_t *)bytes);
+
+    assert(sizeof(uint32_t) == size);
+
+    zmqdrv_fprintf("init (io_threads: %d)\r\n", io_threads);
+
+    // We only support a single zmq context, but zeromq itself supports multiple
+    if (drv->zmq_context)
+    {
+        reply_error(drv->port, driver_caller(drv->port), EBUSY);
+        return;
+    }
+
+    drv->terminating = false;
+    drv->zmq_context = zmq_init(io_threads);
+
+    if (!drv->zmq_context)
+    {
+        reply_error(drv->port, driver_caller(drv->port), zmq_errno());
+        return;
+    }
+
+    zmqdrv_fprintf("init %p\r\n", drv->zmq_context);
+
+    reply_ok(drv->port, driver_caller(drv->port));
 }
 
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-zmqdrv_error(zmq_drv_t *drv, const char *errstr)
+wrap_zmq_term(zmq_drv_t *drv)
 {
-    ErlDrvTermData spec[] =
-        {ERL_DRV_ATOM,   am_error,
-         ERL_DRV_STRING, (ErlDrvTermData)errstr, strlen(errstr),
-         ERL_DRV_TUPLE,  2};
-    driver_send_term(drv->port, driver_caller(drv->port), spec, sizeof(spec)/sizeof(spec[0]));
-}
+    zmqdrv_fprintf("term %p\r\n", drv->zmq_context);
 
-static void
-zmqdrv_error_code(zmq_drv_t *drv, int err)
-{
-    ErlDrvTermData spec[] =
-        {ERL_DRV_ATOM, am_error,
-         ERL_DRV_ATOM, error_atom(err),
-         ERL_DRV_TUPLE,  2};
-    driver_send_term(drv->port, driver_caller(drv->port), spec, sizeof(spec)/sizeof(spec[0]));
-}
+    if (0 < drv->zmq_pid_socket.size())
+    {
+        for (zmq_pid_socket_map_t::iterator it = drv->zmq_pid_socket.begin(); it != drv->zmq_pid_socket.end(); ++it)
+        {
+            zmq_sock_info* si = it->second;
 
-static void
-zmqdrv_ok(zmq_drv_t *drv, ErlDrvTermData pid)
-{
-  ErlDrvTermData spec[] = {ERL_DRV_ATOM, am_zok};
-    driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
-}
+            if (si->busy)
+            {
+                // Remove socket from erlang vm polling
+                driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 0);
 
-static void
-zmqdrv_ok(zmq_drv_t *drv)
-{
-    zmqdrv_ok(drv, driver_caller(drv->port));
-}
-
-static void
-zmqdrv_binary_ok(zmq_drv_t *drv, ErlDrvTermData pid, void *data, size_t size)
-{
-    /* Copy payload. */
-    ErlDrvTermData spec[] =
-      {ERL_DRV_ATOM,   am_zok,
-       ERL_DRV_BUF2BINARY, (ErlDrvTermData)data, size,
-       ERL_DRV_TUPLE, 2};
-
-    driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
-}
-
-static void
-zmqdrv_binary_ok(zmq_drv_t *drv, void *data, size_t size) {
-    zmqdrv_binary_ok(drv, driver_caller(drv->port), data, size);
-}
-
-//-------------------------------------------------------------------
-// Driver callbacks
-//-------------------------------------------------------------------
-
-int zmqdrv_driver_init(void)
-{
-    INIT_ATOM(zok);
-    INIT_ATOM(error);
-    INIT_ATOM(eagain);
-    INIT_ATOM(zmq);
-    INIT_ATOM(msg);
-    INIT_ATOM(true);
-    INIT_ATOM(false);
-    return 0;
-}
-
-/* Driver Start, called on port open. */
-static ErlDrvData
-zmqdrv_start(ErlDrvPort port, char* cmd)
-{
-    zmqdrv_fprintf("driver started by pid %ld\r\n", driver_connected(port));
-    return reinterpret_cast<ErlDrvData>(new zmq_drv_t(port));
-}
-
-/* Driver Stop, called on port close. */
-static void
-zmqdrv_stop(ErlDrvData handle)
-{
-    delete reinterpret_cast<zmq_drv_t*>(handle);
-    zmqdrv_fprintf("driver stopped by pid\r\n");
-}
-
-static void
-zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
-{
-    zmq_drv_t *drv = (zmq_drv_t *)handle;
-
-    // Get 0MQ sockets managed by application thread's signaler
-    // identified by "event" fd.
-    zmq_fd_sockets_map_t::iterator it = drv->zmq_fd_sockets.find((long)event);
-
-    zmqdrv_fprintf("input ready on [idx=%ld]\r\n", (long)event);
-
-    assert(it != drv->zmq_fd_sockets.end());
-
-    zmq_sock_set_t::iterator si = it->second.begin();
-
-    assert(si != it->second.end());
-
-    for (; si != it->second.end(); ++si) {
-        zmq_socket_t   s     = (*si)->socket;
-        uint32_t       idx   = (*si)->idx;
-        ErlDrvTermData owner = (*si)->owner;
-        int            rc    = 0;
-        uint32_t       events;
-        size_t         events_size = sizeof(events);
-
-        zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size);
-
-        while (((*si)->active_mode || (*si)->in_caller) && (events & ZMQ_POLLIN)) {
-            msg_t msg;
-
-            rc = zmq_recv(s, &msg, ZMQ_NOBLOCK);
-
-            ErlDrvTermData pid = (*si)->active_mode ? owner : (*si)->in_caller;
-
-            if (rc == -1) {
-                if (zmq_errno() != EAGAIN) {
-                    ErlDrvTermData spec[] =
-                        {ERL_DRV_ATOM,  am_zmq,
-                         ERL_DRV_UINT,  idx,
-                         ERL_DRV_ATOM,  error_atom(zmq_errno()),
-                         ERL_DRV_TUPLE, 2,
-                         ERL_DRV_TUPLE, 3};
-                    driver_send_term(drv->port, owner, spec, sizeof(spec)/sizeof(spec[0]));
-                    (*si)->in_caller = 0;
+                if (si->out_caller)
+                {
+                    reply_error(drv->port, si->out_caller, ETERM);
+                    si->out_caller = 0;
+                    zmq_msg_close(&si->out_msg);
                 }
-                break;
-            }
+                if (si->in_caller)
+                {
+                    reply_error(drv->port, si->in_caller, ETERM);
+                    si->in_caller = 0;
+                }
+                if (si->poll_caller)
+                {
+                    send_events(drv->port, si->poll_caller, (uint32_t)ZMQ_POLLERR);
+                    si->poll_caller = 0;
+                }
 
-            if ((*si)->active_mode) {
-                // Send message {zmq, Socket, binary()} to the owner pid
-                ErlDrvTermData spec[] =
-                    {ERL_DRV_ATOM,  am_zmq,
-                     ERL_DRV_UINT,  idx,
-                     ERL_DRV_BUF2BINARY, (ErlDrvTermData)zmq_msg_data(&msg), zmq_msg_size(&msg),
-                     ERL_DRV_TUPLE, 3};
-                driver_send_term(drv->port, owner, spec, sizeof(spec)/sizeof(spec[0]));
-            } else {
-                // Return result {ok, binary()} to the waiting caller's pid
-                ErlDrvTermData spec[] = 
-                    {ERL_DRV_ATOM,   am_zok,
-                     ERL_DRV_BUF2BINARY, (ErlDrvTermData)zmq_msg_data(&msg), zmq_msg_size(&msg),
-                     ERL_DRV_TUPLE, 2};
-                driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
-                (*si)->in_caller = 0;
-            }
-
-            // FIXME: add error handling
-            zmqdrv_fprintf("received %ld byte message relayed to pid %ld\r\n", zmq_msg_size(&msg), pid);
-            zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size);
-        }
-    
-        zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size);
-
-        if ((*si)->out_caller != 0 && (events & ZMQ_POLLOUT)) {
-            // There was a pending unwritten message on this socket.
-            // Try to write it.  If the write succeeds/fails clear the ZMQ_POLLOUT
-            // flag and notify the waiting caller of completion of operation.
-            rc = zmq_send(s, &(*si)->out_msg, (*si)->out_flags | ZMQ_NOBLOCK);
-
-            zmqdrv_fprintf("resending message %p (size=%ld) on socket %p (ret=%d)\r\n", 
-                zmq_msg_data(&(*si)->out_msg), zmq_msg_size(&(*si)->out_msg), s, rc);
-
-            if (rc == 0) {
-                zmq_msg_close(&(*si)->out_msg);
-                // Unblock the waiting caller's pid by returning result
-                zmqdrv_ok(drv, (*si)->out_caller);
-                (*si)->out_caller = 0;
-            } else if (zmq_errno() != EAGAIN) {
-                // Unblock the waiting caller's pid by returning result
-                zmq_msg_close(&(*si)->out_msg);
-                zmqdrv_socket_error(drv, (*si)->out_caller, idx, zmq_errno());
-                (*si)->out_caller = 0;
+                si->busy = false;
             }
         }
 
-        zmqdrv_fprintf("--> socket %p events=%d\r\n", s, events);
-    }
-}
-
-// Called when an Erlang process owning sockets died.
-// Perform cleanup of orphan sockets owned by pid.
-static void 
-zmqdrv_process_exit(ErlDrvData handle, ErlDrvMonitor* monitor)
-{
-    zmq_drv_t*     drv = (zmq_drv_t *)handle;
-    ErlDrvTermData pid = driver_get_monitored_process(drv->port, monitor);
-
-    zmqdrv_fprintf("detected death of %lu process\r\n", pid);
-
-    driver_demonitor_process(drv->port, monitor);
-
-    // Walk through the list of sockets and close the ones
-    // owned by pid.
-    zmq_pid_sockets_map_t::iterator it=drv->zmq_pid_sockets.find(pid);
-
-    if (it != drv->zmq_pid_sockets.end()) {
-        zmqdrv_fprintf("pid %lu has %lu sockets to be closed\r\n", pid, it->second.sockets.size());
-        for(zmq_sock_set_t::iterator sit = it->second.sockets.begin();
-            sit != it->second.sockets.end(); ++sit)
-            drv->del_socket((*sit)->idx);
-    }
-}
-
-/* Erlang command, called on binary input from VM. */
-static void
-zmqdrv_outputv(ErlDrvData handle, ErlIOVec *ev)
-{
-    zmq_drv_t*    drv  = (zmq_drv_t *)handle;
-    ErlDrvBinary* data = ev->binv[1];
-    unsigned char cmd  = data->orig_bytes[0]; // First byte is the command
-
-    zmqdrv_fprintf("driver got command %d on thread %p\r\n", (int)cmd, erl_drv_thread_self());
-
-    switch (cmd) {
-        case ZMQ_INIT :
-            zmqdrv_init(drv, ev);
-            break;
-        case ZMQ_TERM :
-            zmqdrv_term(drv, ev);
-            break;
-        case ZMQ_SOCKET :
-            zmqdrv_socket(drv, ev);
-            break;
-        case ZMQ_CLOSE :
-            zmqdrv_close(drv, ev);
-            break;
-        case ZMQ_SETSOCKOPT :
-            zmqdrv_setsockopt(drv, ev);
-            break;
-        case ZMQ_GETSOCKOPT :
-            zmqdrv_getsockopt(drv, ev);
-            break;
-        case ZMQ_BIND :
-            zmqdrv_bind(drv, ev);
-            break;
-        case ZMQ_CONNECT :
-            zmqdrv_connect(drv, ev);
-            break;
-        case ZMQ_SEND :
-            zmqdrv_send(drv, ev);
-            break;
-        case ZMQ_RECV :
-            zmqdrv_recv(drv, ev);
-            break;
-        default :
-            zmqdrv_error(drv, "Invalid driver command");
-    }
-}
-
-static void
-zmqdrv_init(zmq_drv_t *drv, ErlIOVec *ev)
-{
-    /* 
-     * FIXME 
-     * Use ei_decode_* to decode input from erlang VM.
-     * This stuff is not documented anywhere, for now 
-     * binary ErlIOVec is decoded by poking in iov struct.
-     * 
-     * Serge: Dhammika, ei_decode can only be used to decode
-     * external binary format in the "output" callback function.
-     * It's not suitable for using inside "outputv" body that
-     * operates on I/O vectors unless you use term_to_binary/1
-     * call to explicitely convert a term to external binary format.
-     */
-
-    uint32_t io_threads; 
-
-    ErlDrvBinary* input = ev->binv[1];
-    char* bytes = input->orig_bytes;
-    io_threads  = ntohl(*(uint32_t *)(bytes + 1));
-
-    zmqdrv_fprintf("iothreads = %u\r\n", io_threads);
-
-    if (drv->zmq_context) {
-        zmqdrv_error_code(drv, EBUSY);
-        return;
-    }
-    
-    drv->zmq_context = (void *)zmq_init(io_threads);
-
-    if (!drv->zmq_context) {
-        zmqdrv_error_code(drv, zmq_errno());
+        // TODO: Remove if zeromq itself ever gets fixed. As zmq_term() is a
+        // blocking call, and will not return until all sockets are closed,
+        // so do not allow it to be called while there are open sockets.
+        drv->terminating = true;
+        reply_error(drv->port, driver_caller(drv->port), EAGAIN);
         return;
     }
 
-    zmqdrv_ok(drv);
-}
-
-static void
-zmqdrv_term(zmq_drv_t *drv, ErlIOVec *ev)
-{
-    if (!drv->zmq_context) {
-        zmqdrv_error_code(drv, ENODEV);
+    // cross fingers and hope zmq_term() doesn't block, else we hardlock.
+    if (0 != zmq_term(drv->zmq_context))
+    {
+        reply_error(drv->port, driver_caller(drv->port), zmq_errno());
         return;
     }
 
-    zmqdrv_fprintf("calling zmq_term(context) ...\r\n");
-    int rc = zmq_term(drv->zmq_context);
-    zmqdrv_fprintf("terminated zmq context\r\n");
-
-    if (rc < 0) {
-        zmqdrv_error_code(drv, zmq_errno());
-        return;
-    }
-
-    zmqdrv_ok(drv);
     drv->zmq_context = NULL;
+
+    reply_ok(drv->port, driver_caller(drv->port));
 }
 
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-zmqdrv_socket(zmq_drv_t *drv, ErlIOVec *ev)
+wrap_zmq_socket(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    ErlDrvBinary* bin   = ev->binv[1];
-    char*         bytes = bin->orig_bytes;
-    int           type  = *(bytes + 1);
+    int type = *bytes;
+
+    assert(sizeof(uint8_t) == size);
+
+    zmqdrv_fprintf("socket (type: %d)\r\n", type);
+
+    ErlDrvTermData caller = driver_caller(drv->port);
+
+    if (drv->terminating)
+    {
+        reply_error(drv->port, caller, ETERM);
+        return;
+    }
 
     void* s = zmq_socket(drv->zmq_context, type);
-    if (!s) {
-        zmqdrv_error_code(drv, zmq_errno());
+
+    if (!s)
+    {
+        reply_error(drv->port, caller, zmq_errno());
         return;
     }
 
-    int sig_fd;
-    size_t sig_size = sizeof(sig_fd);
-    zmq_getsockopt(s, ZMQ_FD, &sig_fd, &sig_size);
-
-    if (sig_fd < 0) {
-        zmqdrv_error(drv, "Invalid signaler");
+    //TODO: Support Windows 'SOCKET' type?
+    int fd; size_t fd_size = sizeof(fd);
+    if (0 != zmq_getsockopt(s, ZMQ_FD, &fd, &fd_size))
+    {
+        reply_error(drv->port, caller, zmq_errno());
+        zmq_close(s);
         return;
     }
 
-    // Register a new socket handle in order to avoid
-    // passing actual address of socket to Erlang.  This
-    // way it's more safe and also portable between 32 and
-    // 64 bit OS's.
-    uint32_t n = ++drv->zmq_socket_count;
+    zmq_sock_info* si = new zmq_sock_info(s, fd);
 
-    zmq_sock_info* zsi = new zmq_sock_info(s, n, driver_caller(drv->port), sig_fd);
-    if (!zsi) {
+    if (!si)
+    {
         driver_failure_posix(drv->port, ENOMEM);
         return;
     }
 
-    drv->add_socket(zsi);
+    driver_monitor_process(drv->port, caller, &si->monitor);
+    drv->zmq_pid_socket[caller] = si;
+    drv->zmq_fd_socket[si->fd] = si;
 
-    zmqdrv_fprintf("socket %p [idx=%d] owner=%ld\r\n", s, n, zsi->owner);
+    zmqdrv_fprintf("socket %p owner %ld\r\n", si->socket, caller);
 
-    ErlDrvTermData spec[] = {ERL_DRV_ATOM,  am_zok,
-                             ERL_DRV_UINT,  n,
-                             ERL_DRV_TUPLE, 2};
-    driver_send_term(drv->port, zsi->owner, spec, sizeof(spec)/sizeof(spec[0]));
+    reply_ok(drv->port, caller);
 }
 
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-zmqdrv_close(zmq_drv_t *drv, ErlIOVec *ev)
+wrap_zmq_close(zmq_drv_t *drv)
 {
-    ErlDrvBinary* bin   = ev->binv[1];
-    char*         bytes = bin->orig_bytes;
-    uint32_t      idx   = ntohl(*(uint32_t*)(bytes+1));
+    ErlDrvTermData caller = driver_caller(drv->port);
+    zmq_sock_info* si = drv->get_socket_info(caller);
 
-    if (idx > drv->zmq_socket_count) {
-        zmqdrv_error_code(drv, ENODEV);
+    if (!si)
+    {
+        reply_error(drv->port, caller, ENODEV);
         return;
     }
 
-    int ret = drv->del_socket(idx);
+    zmqdrv_fprintf("close %p\r\n", si->socket);
 
-    zmqdrv_fprintf("close [idx=%d] -> %d\r\n", idx, ret);
+    driver_demonitor_process(drv->port, &si->monitor);
 
-    if (ret < 0) {
-        zmqdrv_error_code(drv, zmq_errno());
-        return;
+    if (si->busy)
+    {
+        // Remove socket from vm polling
+        driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 0);
     }
-    
-    zmqdrv_ok(drv);
+
+    drv->zmq_pid_socket.erase(caller);
+    drv->zmq_fd_socket.erase(si->fd);
+
+    //zmq_close(Socket) is called in ~zmq_sock_info
+    delete si;
+
+    reply_ok(drv->port, caller);
 }
 
-static void 
-zmqdrv_setsockopt(zmq_drv_t *drv, ErlIOVec *ev)
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+wrap_zmq_setsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    ErlDrvBinary*  bin   = ev->binv[1];
-    char*          bytes = bin->orig_bytes;
-    uint32_t       idx   = ntohl(*(uint32_t*)(bytes+1));
-    zmq_sock_info* si    = drv->get_socket_info(idx);
-    uint8_t        n     = *(uint8_t*)(bytes+sizeof(idx)+1);
-    char*          p     = bytes + 1 + sizeof(idx) + 1;
+    uint8_t        n = *bytes;
+    const uint8_t* p =  bytes+1;
 
-    if (idx > drv->zmq_socket_count || !si) {
-        zmqdrv_error_code(drv, ENODEV);
+    assert((sizeof(uint8_t) + n) == size);
+
+    ErlDrvTermData caller = driver_caller(drv->port);
+
+    if (drv->terminating)
+    {
+        reply_error(drv->port, caller, ETERM);
+        return;
+    }
+
+    zmq_sock_info* si = drv->get_socket_info(caller);
+
+    if (!si)
+    {
+        reply_error(drv->port, caller, ENODEV);
         return;
     }
 
     zmqdrv_fprintf("setsockopt %p (setting %d options)\r\n", si->socket, (int)n);
 
-    for (uint8_t j=0; j < n; ++j) {
-        unsigned char option = *p++;
-        uint64_t optvallen   = *p++;
-        void*    optval      = p;
+    for (uint8_t j = 0; j < n; ++j)
+    {
+        int         opt        = *p++;
+        uint64_t    optvallen  = *p++;
+        const void*  optval     = p;
 
-        switch (option) {
-            case ZMQ_HWM:           assert(optvallen == 8);  break;
-            case ZMQ_SWAP:          assert(optvallen == 8);  break;
-            case ZMQ_AFFINITY:      assert(optvallen == 8);  break;
-            case ZMQ_IDENTITY:      assert(optvallen < 256); break;
-            case ZMQ_SUBSCRIBE:     assert(optvallen < 256); break;
-            case ZMQ_UNSUBSCRIBE:   assert(optvallen < 256); break;
-            case ZMQ_RATE:          assert(optvallen == 8);  break;
-            case ZMQ_RECOVERY_IVL:  assert(optvallen == 8);  break;
-            case ZMQ_MCAST_LOOP:    assert(optvallen == 8);  break;
-            case ZMQ_SNDBUF:        assert(optvallen == 8);  break;
-            case ZMQ_RCVBUF:        assert(optvallen == 8);  break;
-            case ZMQ_ACTIVE:        assert(optvallen == 1);  break;
+        switch (opt)
+        {
+            case ZMQ_HWM:           assert(optvallen == 8);   break;
+            case ZMQ_SWAP:          assert(optvallen == 8);   break;
+            case ZMQ_AFFINITY:      assert(optvallen == 8);   break;
+            case ZMQ_IDENTITY:      assert(optvallen < 256);  break;
+            case ZMQ_SUBSCRIBE:     assert(optvallen < 256);  break;
+            case ZMQ_UNSUBSCRIBE:   assert(optvallen < 256);  break;
+            case ZMQ_RATE:          assert(optvallen == 8);   break;
+            case ZMQ_RECOVERY_IVL:  assert(optvallen == 8);   break;
+            case ZMQ_MCAST_LOOP:    assert(optvallen == 8);   break;
+            case ZMQ_SNDBUF:        assert(optvallen == 8);   break;
+            case ZMQ_RCVBUF:        assert(optvallen == 8);   break;
+            case ZMQ_LINGER:        assert(optvallen == 4);   break;
+            case ZMQ_RECONNECT_IVL: assert(optvallen == 4);   break;
+            case ZMQ_BACKLOG:       assert(optvallen == 4);   break;
         }
 
-        zmqdrv_fprintf("setsockopt %p (%d)\r\n", si->socket, option);
+        zmqdrv_fprintf("setsockopt %p (opt: %d)\r\n", si->socket, opt);
 
-        if (option == ZMQ_ACTIVE)
-            si->active_mode = *(char*)optval;
-        else if (zmq_setsockopt(si->socket, option, optval, optvallen) < 0) {
-            zmqdrv_error_code(drv, zmq_errno());
+        if (0 != zmq_setsockopt(si->socket, opt, optval, optvallen))
+        {
+            reply_error(drv->port, caller, zmq_errno());
             return;
         }
 
         p += optvallen;
     }
 
-    zmqdrv_ok(drv);
+    reply_ok(drv->port, caller);
 }
 
-static void 
-zmqdrv_getsockopt(zmq_drv_t *drv, ErlIOVec *ev)
-{
-    ErlDrvBinary*  bin   = ev->binv[1];
-    char*          bytes = bin->orig_bytes;
-    uint32_t       idx   = ntohl(*(uint32_t*)(bytes+1));
-    void*          s     = drv->get_zmq_socket(idx);
-    uint32_t       opt   = ntohl (*(uint32_t*)(bytes+sizeof(idx)+1));
-
-    if (opt == ZMQ_RCVMORE) {
-        int64_t val;
-        size_t valsz = sizeof (val);
-        if (zmq_getsockopt (s, opt, &val, &valsz) < 0) {
-            zmqdrv_error_code(drv, zmq_errno());
-            return;
-        }
-
-        ErlDrvTermData spec[] = {
-            ERL_DRV_ATOM,  am_zok,
-            ERL_DRV_ATOM, (val ? am_true : am_false),
-            ERL_DRV_TUPLE, 2};
-        driver_send_term(drv->port, driver_caller(drv->port), spec, sizeof(spec)/sizeof(spec[0]));
-        return;
-    }
-
-    zmqdrv_error(drv, "Not implemented");
-}
-
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-zmqdrv_bind(zmq_drv_t *drv, ErlIOVec *ev)
+wrap_zmq_getsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    ErlDrvBinary* bin   = ev->binv[1];
-    char*         bytes = bin->orig_bytes;
-    uint16_t      size  = bin->orig_size - 5;
-    uint32_t      idx   = ntohl(*(uint32_t*)(bytes+1));
-    void*         s     = drv->get_zmq_socket(idx);
-    char          addr[512];
+    int opt = *bytes;
 
-    if (size > sizeof(addr) - 1) {
-        zmqdrv_error_code(drv, E2BIG);
+    assert(sizeof(uint8_t) == size);
+
+    ErlDrvTermData caller = driver_caller(drv->port);
+
+    if (drv->terminating)
+    {
+        reply_error(drv->port, caller, ETERM);
         return;
     }
 
-    memcpy(addr, bytes + 5, size);
-    addr[size] = '\0';
+    zmq_sock_info* si = drv->get_socket_info(caller);
 
-    if (idx > drv->zmq_socket_count || !s) {
-        zmqdrv_error_code(drv, ENODEV);
-        return;
-    } else if (addr[0] == '\0') {
-        zmqdrv_error_code(drv, EINVAL);
+    if (!si)
+    {
+        reply_error(drv->port, caller, ENODEV);
         return;
     }
 
-    if (zmq_bind(s, addr) < 0) {
-        zmqdrv_error_code(drv, zmq_errno());
+    zmqdrv_fprintf("getsockopt %p (opt: %d)\r\n", si->socket, opt);
+
+    uint8_t optval[255] = {0};
+    size_t optvallen = 0;
+    void * p = (void*)optval;
+
+    switch (opt)
+    {
+        case ZMQ_HWM:           optvallen = 8;  break;
+        case ZMQ_SWAP:          optvallen = 8;  break;
+        case ZMQ_AFFINITY:      optvallen = 8;  break;
+        case ZMQ_IDENTITY:      optvallen = 255;break;
+        case ZMQ_RATE:          optvallen = 8;  break;
+        case ZMQ_RECOVERY_IVL:  optvallen = 8;  break;
+        case ZMQ_MCAST_LOOP:    optvallen = 8;  break;
+        case ZMQ_SNDBUF:        optvallen = 8;  break;
+        case ZMQ_RCVBUF:        optvallen = 8;  break;
+        case ZMQ_RCVMORE:       optvallen = 8;  break;
+        case ZMQ_LINGER:        optvallen = 4;  break;
+        case ZMQ_RECONNECT_IVL: optvallen = 4;  break;
+        case ZMQ_BACKLOG:       optvallen = 4;  break;
+        case ZMQ_FD:            optvallen = 4;  break;
+        case ZMQ_EVENTS:        optvallen = 4;  break;
+        case ZMQ_TYPE:          optvallen = 4;  break;
+    }
+
+    if (0 != zmq_getsockopt(si->socket, opt, p, &optvallen))
+    {
+        reply_error(drv->port, caller, zmq_errno());
         return;
     }
 
-    zmqdrv_ok(drv);
+    switch (opt)
+    {
+        // uint64
+        case ZMQ_HWM:
+        case ZMQ_AFFINITY:
+        case ZMQ_SNDBUF:
+        case ZMQ_RCVBUF:
+            reply_ok_uint64(drv->port, caller, *(uint64_t*)p);
+            break;
+
+        // int64
+        case ZMQ_SWAP:
+        case ZMQ_RATE:
+        case ZMQ_RECOVERY_IVL:
+            reply_ok_int64(drv->port, caller, *(int64_t*)p);
+            break;
+
+        // bool (from int64 0/1)
+        case ZMQ_RCVMORE:
+        case ZMQ_MCAST_LOOP:
+            reply_ok_atom(drv->port, caller, *(int64_t*)p ? am_true : am_false);
+            break;
+
+        // ZMQ_POLLIN|ZMQ_POLLOUT (from uint32)
+        case ZMQ_EVENTS:
+            reply_ok_events(drv->port, caller, *(uint32_t*)p);
+            break;
+
+        // int
+        case ZMQ_LINGER:
+        case ZMQ_RECONNECT_IVL:
+        case ZMQ_BACKLOG:
+        case ZMQ_FD:
+        case ZMQ_TYPE:
+            reply_ok_int(drv->port, caller, *(int*)p);
+            break;
+
+        // binary
+        case ZMQ_IDENTITY:
+            reply_ok_binary(drv->port, caller, p, optvallen);
+            break;
+    }
+
+    return;
 }
 
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-zmqdrv_connect(zmq_drv_t *drv, ErlIOVec *ev)
+wrap_zmq_bind(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    ErlDrvBinary* bin   = ev->binv[1];
-    char*         bytes = bin->orig_bytes;
-    uint32_t      idx   = ntohl(*(uint32_t*)(bytes+1));
-    void*         s     = drv->get_zmq_socket(idx);
-    uint16_t      size  = bin->orig_size - 5;
-    char          addr[512];
+    // expects the address to be zero terminated
+    char* addr  = (char*)bytes;
 
-    if (idx > drv->zmq_socket_count || !s) {
-        zmqdrv_error_code(drv, ENODEV);
+    assert(1 <= size); // ? could check for zero termination within size limit
+
+    ErlDrvTermData caller = driver_caller(drv->port);
+
+    if (drv->terminating)
+    {
+        reply_error(drv->port, caller, ETERM);
         return;
     }
 
-    if (size > sizeof(addr) - 1) {
-        zmqdrv_error_code(drv, E2BIG);
+    zmq_sock_info* si = drv->get_socket_info(caller);
+
+    if (!si)
+    {
+        reply_error(drv->port, caller, ENODEV);
         return;
     }
 
-    memcpy(addr, bytes + 5, size);
-    addr[size] = '\0';
+    zmqdrv_fprintf("bind %p (addr: %s)\r\n", si->socket, addr);
 
-    zmqdrv_fprintf("connect %s\r\n", addr);
-
-    if (!addr[0]) {
-        zmqdrv_error_code(drv, EINVAL);
+    if (0 != zmq_bind(si->socket, addr))
+    {
+        reply_error(drv->port, caller, zmq_errno());
         return;
     }
 
-    if (zmq_connect(s, addr) < 0) {
-        zmqdrv_error_code(drv, zmq_errno());
-        return;
-    }
-
-    zmqdrv_ok(drv);
+    reply_ok(drv->port, caller);
 }
 
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-zmqdrv_send(zmq_drv_t *drv, ErlIOVec *ev)
+wrap_zmq_connect(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    ErlDrvBinary*  bin   = ev->binv[1];
-    char*          bytes = bin->orig_bytes;
-    uint32_t       idx   = ntohl(*(uint32_t*)(bytes+1));
-    zmq_sock_info* si    = drv->get_socket_info(idx);
-    uint32_t       flags = ntohl(*(uint32_t*)(bytes+5));
-    void*          data  = (void *)(bytes + 9);
-    size_t         size  = bin->orig_size - 9;
+    // expects the address to be zero terminated
+    char* addr  = (char*)bytes;
 
-    if (idx > drv->zmq_socket_count || !si) {
-        zmqdrv_error_code(drv, ENODEV);
+    assert(1 <= size); // ? could check for zero termination within size limit
+
+    ErlDrvTermData caller = driver_caller(drv->port);
+
+    if (drv->terminating)
+    {
+        reply_error(drv->port, caller, ETERM);
         return;
     }
 
-#ifdef ZMQDRV_DEBUG
-    uint32_t events;
-    size_t events_size = sizeof(events);
-    zmq_getsockopt(si->socket, ZMQ_EVENTS, &events, &events_size);
-    zmqdrv_fprintf("sending %p [idx=%d] %lu bytes (events=%d)\r\n", si->socket, idx, size, events);
-#endif
+    zmq_sock_info* si = drv->get_socket_info(caller);
 
-    if (si->out_caller != 0) {
-        // There's still an unwritten message pending
-        zmqdrv_error_code(drv, EBUSY);
+    if (!si)
+    {
+        reply_error(drv->port, caller, ENODEV);
         return;
     }
 
-    // Increment the reference count on binary so that zmq can
-    // take ownership of it.
+    zmqdrv_fprintf("connect %p (addr: %s)\r\n", si->socket, addr);
+
+    if (0 != zmq_connect(si->socket, addr))
+    {
+        reply_error(drv->port, caller, zmq_errno());
+        return;
+    }
+
+    reply_ok(drv->port, caller);
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+wrap_zmq_send(zmq_drv_t *drv, const uint8_t* bytes, size_t size, ErlDrvBinary* bin)
+{
+    uint32_t  flags     = ntohl(*(uint32_t*)bytes);
+    void*     data      = (void *)(bytes+sizeof(uint32_t));
+    size_t    data_size = size - sizeof(uint32_t);
+
+    assert(sizeof(uint32_t) <= size);
+
+    ErlDrvTermData caller = driver_caller(drv->port);
+
+    if (drv->terminating)
+    {
+        reply_error(drv->port, caller, ETERM);
+        return;
+    }
+
+    zmq_sock_info* si = drv->get_socket_info(caller);
+
+    if (!si)
+    {
+        reply_error(drv->port, caller, ENODEV);
+        return;
+    }
+
+    assert(0 == si->out_caller);
+
+    zmqdrv_fprintf("send %p (flags: %u bytes: %u)\r\n", si->socket, flags, data_size);
+
+    if (si->out_caller || si->in_caller)
+    {
+        // There's still a blocking send/recv pending
+        reply_error(drv->port, caller, EBUSY);
+        return;
+    }
+
+    // Increment the reference count on binary so that zmq can take ownership of it.
     driver_binary_inc_refc(bin);
 
-    if (zmq_msg_init_data(&si->out_msg, data, size, &zmq_free_binary, bin)) {
-        zmqdrv_error_code(drv, zmq_errno());
+    if (zmq_msg_init_data(&si->out_msg, data, data_size, &zmqcb_free_binary, bin))
+    {
+        reply_error(drv->port, caller, zmq_errno());
         driver_binary_dec_refc(bin);
         return;
     }
 
-    if (zmq_send(si->socket, &si->out_msg, flags | ZMQ_NOBLOCK) == 0) {
-        zmqdrv_ok(drv);
-        zmqdrv_ready_input((ErlDrvData)drv, (ErlDrvEvent)si->fd);
-    } else {
-        int e = zmq_errno();
-        if (e == EAGAIN) {
-            // No msg returned to caller - make him wait until async
-            // send succeeds
-            si->out_caller = driver_caller(drv->port);
-            return;
-        }
-        zmqdrv_error_code(drv, e);
+    if (0 == zmq_send(si->socket, &si->out_msg, flags|ZMQ_NOBLOCK))
+    {
+        reply_ok(drv->port, caller);
+        zmq_msg_close(&si->out_msg);
     }
-    zmq_msg_close(&si->out_msg);
+    else if (ZMQ_NOBLOCK != (ZMQ_NOBLOCK & flags) && EAGAIN == zmq_errno())
+    {
+        // Caller requested blocking send
+        // Can't send right now. Make the caller wait by not returning result
+        zmqdrv_fprintf("send %p blocking\r\n", si->socket);
+
+        si->out_flags = flags;
+        si->out_caller = caller;
+
+        if (!si->busy)
+        {
+            driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 1);
+            si->busy = true;
+        }
+    }
+    else
+    {
+        reply_error(drv->port, caller, zmq_errno());
+        zmq_msg_close(&si->out_msg);
+    }
 }
 
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-zmqdrv_recv(zmq_drv_t *drv, ErlIOVec *ev)
+wrap_zmq_recv(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    ErlDrvBinary*  bin   = ev->binv[1];
-    char*          bytes = bin->orig_bytes;
-    uint32_t       idx   = ntohl(*(uint32_t*)(bytes+1));
-    zmq_sock_info* si    = drv->get_socket_info(idx);
+    uint32_t flags = ntohl(*(uint32_t*)bytes);
 
-    if (idx > drv->zmq_socket_count || !si) {
-        zmqdrv_error_code(drv, ENODEV);
+    assert(sizeof(uint32_t) == size);
+
+    ErlDrvTermData caller = driver_caller(drv->port);
+
+    if (drv->terminating)
+    {
+        reply_error(drv->port, caller, ETERM);
         return;
     }
 
-    if (si->active_mode) {
-        zmqdrv_error_code(drv, EINVAL);
+    zmq_sock_info* si = drv->get_socket_info(caller);
+
+    if (!si)
+    {
+        reply_error(drv->port, caller, ENODEV);
         return;
     }
 
-    if (si->in_caller != 0) {
-        // Previous recv() call in passive mode didn't complete.
-        // The owner must be blocked waiting for result.
-        zmqdrv_error_code(drv, EBUSY);
+    assert(0 == si->in_caller);
+
+    zmqdrv_fprintf("recv %p (flags: %u)\r\n", si->socket, flags);
+
+    zmq_msg_t msg;
+    zmq_msg_init(&msg);
+
+    if (0 == zmq_recv(si->socket, &msg, flags|ZMQ_NOBLOCK))
+    {
+        reply_ok_binary(drv->port, caller, zmq_msg_data(&msg), zmq_msg_size(&msg));
+    }
+    else if (ZMQ_NOBLOCK != (ZMQ_NOBLOCK & flags) && EAGAIN == zmq_errno())
+    {
+        // Caller requested blocking recv
+        // No input available. Make the caller wait by not returning result
+        zmqdrv_fprintf("recv %p blocking\r\n", si->socket);
+
+        si->in_flags = flags;
+        si->in_caller = caller;
+
+        if (!si->busy)
+        {
+            driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 1);
+            si->busy = true;
+        }
+    }
+    else
+    {
+        reply_error(drv->port, caller, zmq_errno());
+    }
+
+    zmq_msg_close(&msg);
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+wrap_zmq_poll(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
+{
+    uint32_t events = *bytes;
+
+    assert(sizeof(uint32_t) == size);
+
+    ErlDrvTermData caller = driver_caller(drv->port);
+
+    if (drv->terminating)
+    {
+        reply_error(drv->port, caller, ETERM);
         return;
     }
 
-    uint32_t events;
-    size_t events_size = sizeof(events);
-    zmq_getsockopt(si->socket, ZMQ_EVENTS, &events, &events_size);
+    zmq_sock_info* si = drv->get_socket_info(caller);
 
-    if (events == 0)
-        si->in_caller = driver_caller(drv->port);
-    else {
-        msg_t msg;
-
-        if (zmq_recv(si->socket, &msg, ZMQ_NOBLOCK) == 0)
-            zmqdrv_binary_ok(drv, zmq_msg_data(&msg), zmq_msg_size(&msg));
-        else if (zmq_errno() == EAGAIN) {
-            // No input available. Make the caller wait by not returning result
-            si->in_caller = driver_caller(drv->port);
-        } else
-            zmqdrv_error_code(drv, zmq_errno());
+    if (!si)
+    {
+        reply_error(drv->port, caller, ENODEV);
+        return;
     }
+
+    zmqdrv_fprintf("poll %p (events: %u)\r\n", si->socket, events);
+
+    if (si->busy)
+    {
+        reply_error(drv->port, caller, EBUSY);
+        return;
+    }
+
+    assert((ZMQ_POLLIN|ZMQ_POLLOUT) & events);
+
+    uint32_t revents;
+    size_t revents_size = sizeof(revents);
+
+    if (0 == zmq_getsockopt(si->socket, ZMQ_EVENTS, &revents, &revents_size))
+    {
+        // reply immediately; poll event notification happens out of band.
+        reply_ok(drv->port, caller);
+
+        revents &= events;
+
+        if (0 != revents)
+        {
+            send_events(drv->port, caller, revents);
+        }
+        else
+        {
+            // No matching pending event, wait for one.
+            zmqdrv_fprintf("poll %p blocking\r\n", si->socket);
+
+            si->poll_events = events;
+            si->poll_caller = caller;
+            si->busy = true;
+            driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 1);
+        }
+    }
+    else
+    {
+        // EINVAL will only occur if our getsockopt call was invalid
+        assert(EINVAL != zmq_errno());
+
+        // else the problem was with the context/socket, and should be returned
+        reply_error(drv->port, caller, zmq_errno());
+    }
+}
+
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// Driver callbacks
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static int
+zmqdrv_driver_init(void)
+{
+    INIT_ATOM(zmq_drv);
+    INIT_ATOM(ok);
+    INIT_ATOM(error);
+    INIT_ATOM(true);
+    INIT_ATOM(false);
+    INIT_ATOM(pollin);
+    INIT_ATOM(pollout);
+    INIT_ATOM(pollerr);
+
+    INIT_ATOM(ebusy);
+    INIT_ATOM(enosys);
+    INIT_ATOM(eterm);
+    INIT_ATOM(efault);
+    INIT_ATOM(einval);
+    INIT_ATOM(eagain);
+    INIT_ATOM(enotsup);
+    INIT_ATOM(efsm);
+    INIT_ATOM(emthread);
+    INIT_ATOM(eprotonosupport);
+    INIT_ATOM(enocompatproto);
+    INIT_ATOM(eaddrinuse);
+    INIT_ATOM(eaddrnotavail);
+    INIT_ATOM(enodev);
+
+    return 0;
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static ErlDrvData
+zmqdrv_start(ErlDrvPort port, char* /*cmd*/)
+{
+    zmqdrv_fprintf("zmq port driver started by pid %ld\r\n", driver_connected(port));
+    return reinterpret_cast<ErlDrvData>(new zmq_drv_t(port));
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+zmqdrv_stop(ErlDrvData handle)
+{
+    zmqdrv_fprintf("zmq port driver stopping\r\n");
+    delete reinterpret_cast<zmq_drv_t*>(handle);
+    zmqdrv_fprintf("zmq port driver stopped\r\n");
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
+{
+    zmq_drv_t *drv = reinterpret_cast<zmq_drv_t*>(handle);
+    zmq_sock_info *si = drv->get_socket_info((int)event);
+
+    // I'm not sure if a race condition could develop here or not
+    // So let's assert and see if we ever hit it.  Hopefully not.
+    assert(!drv->terminating);
+    assert(NULL != si);
+    assert(si->busy);
+
+    // unregister event with erlang vm while we work with the socket
+    driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 0);
+
+    // Finish blocking recv request if input is ready
+    if (si->in_caller)
+    {
+        zmq_msg_t msg;
+        zmq_msg_init(&msg);
+
+        if (0 == zmq_recv(si->socket, &msg, si->in_flags|ZMQ_NOBLOCK))
+        {
+            // Unblock the waiting caller's pid by returning result
+            reply_ok_binary(drv->port, si->in_caller, zmq_msg_data(&msg), zmq_msg_size(&msg));
+            si->in_caller = 0;
+            si->in_flags = 0;
+        }
+        else if (zmq_errno() != EAGAIN)
+        {
+            // Unblock the waiting caller's pid by returning error
+            reply_error(drv->port, si->in_caller, zmq_errno());
+            si->in_caller = 0;
+            si->in_flags = 0;
+        }
+        // else no input was ready, continue waiting
+
+        zmq_msg_close(&msg);
+    }
+
+    // Finish blocking send request if able
+    if (si->out_caller)
+    {
+        if (0 == zmq_send(si->socket, &si->out_msg, si->out_flags|ZMQ_NOBLOCK))
+        {
+            // Unblock the waiting caller's pid by returning result
+            reply_ok(drv->port, si->out_caller);
+            si->out_caller = 0;
+            si->out_flags = 0;
+            zmq_msg_close(&si->out_msg);
+        }
+        else if (zmq_errno() != EAGAIN)
+        {
+            // Unblock the waiting caller's pid by returning error
+            reply_error(drv->port, si->out_caller, zmq_errno());
+            si->out_caller = 0;
+            si->out_flags = 0;
+            zmq_msg_close(&si->out_msg);
+        }
+        // else not able to send, continue waiting
+    }
+
+    // Finish poll request if events available
+    if (si->poll_caller)
+    {
+        uint32_t revents = 0;
+        size_t revents_size = sizeof(revents);
+
+        if (0 == zmq_getsockopt(si->socket, ZMQ_EVENTS, &revents, &revents_size))
+        {
+            revents &= si->poll_events;
+
+            if (0 != revents)
+            {
+                send_events(drv->port, si->poll_caller, revents);
+                si->poll_caller = 0;
+                si->poll_events = 0;
+            }
+            // else no requested events pending, continue waiting
+        }
+        else
+        {
+            // EINVAL will only occur if our getsockopt call was invalid
+            assert(EINVAL != zmq_errno());
+
+            // send out of band event error notification
+            send_events(drv->port, si->poll_caller, (uint32_t)ZMQ_POLLERR);
+            si->poll_caller = 0;
+            si->poll_events = 0;
+        }
+    }
+
+    // reregister event with erlang vm if any pending operations exist
+    if (si->poll_caller || si->in_caller || si->out_caller)
+    {
+        driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 1);
+    }
+    else
+    {
+        si->busy = false;
+    }
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+zmqdrv_process_exit(ErlDrvData handle, ErlDrvMonitor* monitor)
+{
+    zmq_drv_t*     drv = reinterpret_cast<zmq_drv_t*>(handle);
+    ErlDrvTermData pid = driver_get_monitored_process(drv->port, monitor);
+
+    zmqdrv_fprintf("detected death of %lu process\r\n", pid);
+
+    zmq_sock_info* si = drv->get_socket_info(pid);
+
+    assert(NULL != si);
+
+    zmqdrv_fprintf("force close %p\r\n", si->socket);
+
+    driver_demonitor_process(drv->port, &si->monitor);
+
+    if (si->busy)
+    {
+        // Remove socket from vm polling
+        driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 0);
+    }
+
+    drv->zmq_pid_socket.erase(pid);
+    drv->zmq_fd_socket.erase(si->fd);
+
+    //zmq_close(Socket) is called in ~zmq_sock_info
+    delete si;
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static void
+zmqdrv_outputv(ErlDrvData handle, ErlIOVec *ev)
+{
+    zmq_drv_t*            drv   = reinterpret_cast<zmq_drv_t*>(handle);
+    ErlDrvBinary*         bin   = ev->binv[1];
+    enum driver_commands  cmd   = (enum driver_commands)bin->orig_bytes[0];
+    uint8_t*              bytes = (uint8_t*)&bin->orig_bytes[1];
+
+    assert(1 <= bin->orig_size);
+
+    zmqdrv_fprintf("driver got command %d on thread %p\r\n", (int)cmd, erl_drv_thread_self());
+
+    switch (cmd)
+    {
+        case ZMQ_INIT:
+            wrap_zmq_init(drv, bytes, bin->orig_size - 1);
+            break;
+        case ZMQ_TERM:
+            wrap_zmq_term(drv);
+            break;
+        case ZMQ_SOCKET:
+            wrap_zmq_socket(drv, bytes, bin->orig_size - 1);
+            break;
+        case ZMQ_CLOSE:
+            wrap_zmq_close(drv);
+            break;
+        case ZMQ_SETSOCKOPT:
+            wrap_zmq_setsockopt(drv, bytes, bin->orig_size - 1);
+            break;
+        case ZMQ_GETSOCKOPT:
+            wrap_zmq_getsockopt(drv, bytes, bin->orig_size - 1);
+            break;
+        case ZMQ_BIND:
+            wrap_zmq_bind(drv, bytes, bin->orig_size - 1);
+            break;
+        case ZMQ_CONNECT:
+            wrap_zmq_connect(drv, bytes, bin->orig_size - 1);
+            break;
+        case ZMQ_SEND:
+            wrap_zmq_send(drv, bytes, bin->orig_size - 1, bin);
+            break;
+        case ZMQ_RECV:
+            wrap_zmq_recv(drv, bytes, bin->orig_size - 1);
+            break;
+        case ZMQ_POLL:
+            wrap_zmq_poll(drv, bytes, bin->orig_size - 1);
+            break;
+        default :
+            assert(true);
+    }
+}
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+static ErlDrvEntry zmq_driver_entry = {
+    zmqdrv_driver_init,                 // init
+    zmqdrv_start,                       // startup
+    zmqdrv_stop,                        // shutdown
+    NULL,                               // output
+    zmqdrv_ready_input,                 // ready_input
+    NULL,                               // ready_output
+    (char*)"zmq_drv",                   // driver name
+    NULL,                               // finish
+    NULL,                               // handle
+    NULL,                               // control
+    NULL,                               // timeout
+    zmqdrv_outputv,                     // outputv, binary output
+    NULL,                               // ready_async
+    NULL,                               // flush
+    NULL,                               // call
+    NULL,                               // event
+    ERL_DRV_EXTENDED_MARKER,            // ERL_DRV_EXTENDED_MARKER
+    ERL_DRV_EXTENDED_MAJOR_VERSION,     // ERL_DRV_EXTENDED_MAJOR_VERSION
+    ERL_DRV_EXTENDED_MAJOR_VERSION,     // ERL_DRV_EXTENDED_MINOR_VERSION
+    ERL_DRV_FLAG_USE_PORT_LOCKING,      // ERL_DRV_FLAGs
+    NULL,                               // handle2 (reserved)
+    zmqdrv_process_exit,                // process_exit
+    NULL                                // stop_select
+};
+
+//-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+extern "C"
+DRIVER_INIT(zmq_drv)
+{
+    return &zmq_driver_entry;
 }

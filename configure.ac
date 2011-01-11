@@ -39,25 +39,25 @@ AC_ERLANG_CHECK_LIB([erl_interface],,
 
 dnl Available flags.
 AC_ARG_WITH([erlang],
-	AC_HELP_STRING([--with-erlang=PATH],
-	    [PATH to Erlang installation (optional)]),
-	with_erlang=${withval%/},
-	with_erlang="")
+    AC_HELP_STRING([--with-erlang=PATH],
+        [PATH to Erlang installation (optional)]),
+    with_erlang=${withval%/},
+    with_erlang="")
 
 dnl erl(1) is used to compile Erlang modules.
 if test "x${with_erlang}" = "x"; then
-	AC_ERLANG_PATH_ERL
-	AC_ERLANG_PATH_ERLC
+    AC_ERLANG_PATH_ERL
+    AC_ERLANG_PATH_ERLC
     AC_ERLANG_SUBST_ROOT_DIR
 else
-	erl_path="${with_erlang}/bin"
-	AC_ERLANG_PATH_ERL(,  [$erl_path$PATH_SEPARATOR$PATH])
-	AC_ERLANG_PATH_ERLC(, [$erl_path$PATH_SEPARATOR$PATH])
+    erl_path="${with_erlang}/bin"
+    AC_ERLANG_PATH_ERL(,  [$erl_path$PATH_SEPARATOR$PATH])
+    AC_ERLANG_PATH_ERLC(, [$erl_path$PATH_SEPARATOR$PATH])
     AC_ERLANG_SUBST_ROOT_DIR
 fi
 
 if test "x${ERL}" = "x"; then
-	AC_MSG_ERROR([
+    AC_MSG_ERROR([
 Erlang not found. Fill the ERL variable with erl(1) path or provide
 Erlang prefix with --with-erlang.])
 fi
@@ -69,10 +69,10 @@ AC_ERLANG_SUBST_ERTS_VER
 
 dnl Determine directories for installation.
 if test "x${prefix}" = "xNONE"; then
-	dnl Inside Erlang lib directory.
+    dnl Inside Erlang lib directory.
     AC_SUBST([PACKAGE_INSTALL_DIR], [${ERLANG_ERTS_DIR%/*}/lib/${PACKAGE}-${VERSION}])
 else
-	dnl Under $prefix
+    dnl Under $prefix
     AC_SUBST([PACKAGE_INSTALL_DIR], [${prefix}/${PACKAGE}-${VERSION}])
 fi
 
@@ -88,26 +88,26 @@ dnl ------------------------------------------------------------------
 
 dnl Debugging option.
 AC_ARG_ENABLE([debug],
-	AC_HELP_STRING([--enable-debug],
-	    [turn on debugging [[default=yes]]]),,
-	enable_debug=no)
+    AC_HELP_STRING([--enable-debug],
+        [turn on debugging [[default=yes]]]),,
+    enable_debug=no)
 if test "x${enable_debug}" = "xyes"; then
-	AC_DEFINE([DEBUG], [], [Enable debug])
+    AC_DEFINE([DEBUG], [], [Enable debug])
     AC_SUBST([DEBUG], [1])
-	AC_SUBST([ERL_FLAGS], [+debug_info -Ddebug])
-	CXXFLAGS="-O0 -DDEBUG $CXXFLAGS"
+    AC_SUBST([ERL_FLAGS], [+debug_info -Ddebug])
+    CXXFLAGS="-O0 -DDEBUG $CXXFLAGS"
 else
     AC_SUBST([ERL_FLAGS], [])
-	CXXFLAGS="-O3 -DNDEBUG $CXXFLAGS"
+    CXXFLAGS="-O3 -DNDEBUG $CXXFLAGS"
 fi
 
 dnl Treat warnings as errors.
 AC_ARG_ENABLE([warnings],
-	AC_HELP_STRING([--enable-warnings],
-	    [treat warnings as errors [[default=yes]]]),,
-	enable_warnings="yes")
+    AC_HELP_STRING([--enable-warnings],
+        [treat warnings as errors [[default=yes]]]),,
+    enable_warnings="yes")
 if test "x${enable_warnings}" = "xyes" -a "x${GCC}" = "xyes"; then
-	CXXFLAGS="${CXXFLAGS% } -Werror"
+    CXXFLAGS="${CXXFLAGS% } -Werror"
 fi
 
 CXXFLAGS="-g ${CXXFLAGS% } -I${ERLANG_DRV_INCLUDE} -I${ERLANG_LIB_DIR_erl_interface}/include"
@@ -117,9 +117,9 @@ dnl Documentation.
 dnl ------------------------------------------------------------------
 
 AC_ARG_ENABLE([documentation],
-	AC_HELP_STRING([--enable-docs],
-	    [build documentation [[default=yes]]]),,
-	enable_docs="yes")
+    AC_HELP_STRING([--enable-docs],
+        [build documentation [[default=yes]]]),,
+    enable_docs="yes")
 AM_CONDITIONAL(ENABLE_DOCUMENTATION, test "x${enable_docs}" = "xyes")
 
 dnl ------------------------------------------------------------------
@@ -127,9 +127,9 @@ dnl Examples.
 dnl ------------------------------------------------------------------
 
 AC_ARG_ENABLE([examples],
-	AC_HELP_STRING([--enable-examples],
-	    [build examples [[default=yes]]]),,
-	enable_examples="yes")
+    AC_HELP_STRING([--enable-examples],
+        [build examples [[default=yes]]]),,
+    enable_examples="yes")
 AM_CONDITIONAL(ENABLE_EXAMPLES, test "x${enable_examples}" = "xyes")
 
 dnl ------------------------------------------------------------------
@@ -138,7 +138,7 @@ dnl ------------------------------------------------------------------
 
 AC_ARG_WITH([zeromq], 
     AC_HELP_STRING([--with-zeromq=PATH],
-    [set PATH to the installation of zeromq library [[default=/usr]]]),
+        [set PATH to the installation of zeromq library [[default=/usr]]]),
     [ZEROMQ_LIB=${with_zeromq}],
     [ZEROMQ_LIB="/usr"])
 
@@ -155,12 +155,11 @@ dnl ------------------------------------------------------------------
 
 case "${host_os}" in
     *darwin*)
-	DARWIN_CXXFLAGS="-dynamiclib -m64 -Wl,-undefined -Wl,dynamic_lookup"
+        DARWIN_CXXFLAGS="-dynamiclib -m64 -Wl,-undefined -Wl,dynamic_lookup"
         CXXFLAGS="-D_DARWIN_C_SOURCE $DARWIN_CXXFLAGS $CXXFLAGS"
-	AC_SUBST([LIB_EXT], [.so])
-	;;
+        AC_SUBST([LIB_EXT], [.so]);;
     *)
-	AC_SUBST([LIB_EXT], [.so]);;
+        AC_SUBST([LIB_EXT], [.so]);;
 esac
 
 case $(uname -p) in

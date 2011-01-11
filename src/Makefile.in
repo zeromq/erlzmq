@@ -36,6 +36,6 @@ install:
 	@[ -d $(DOC_DIR) ] || (echo "Error: run 'make docs' first!" && exit 1)
 	$(MKDIR_P) $(DIST_DIR)/src $(DIST_DIR)/ebin $(DIST_DIR)/doc
 	$(INSTALL) ../src/*.erl $(DIST_DIR)/src/
-	$(INSTALL) ../ebin/*.{beam,app} $(DIST_DIR)/ebin/
-	$(INSTALL) ../doc/*.{css,html,png} $(DIST_DIR)/doc
-	$(INSTALL) ../{README,LICENSE} $(DIST_DIR)
+	$(INSTALL) ../ebin/*.beam ../ebin/*.app $(DIST_DIR)/ebin/
+	$(INSTALL) ../doc/*.css ../doc/*.html ../doc/*.png $(DIST_DIR)/doc
+	$(INSTALL) ../README ../LICENSE $(DIST_DIR)

@@ -4,28 +4,30 @@
 -module(zmq_pubserver).
 -export([run/0, run/2]).
 
-run() ->
-    run(50, 1000).
-run(N, Delay) ->
+run() -> run(10, 1000).
+run(N, Delay) when is_integer(N), is_integer(Delay) ->
     spawn(fun() ->
-        case zmq:socket(pub, []) of
-        {ok, Socket} -> 
-            zmq:bind(Socket, "tcp://127.0.0.1:5550"),
+        {ok ,Context} = zmq:init(1),
+        case zmq:socket(Context, pub) of
+        {ok, Socket} ->
+            ok = zmq:bind(Socket, "tcp://127.0.0.1:5550"),
             send(Socket, Delay, N);
-        Other -> 
+        Other ->
             io:format("~p error creating socket: ~p\n", [self(), Other])
-        end
+        end,
+        ok = zmq:term(Context)
     end).
 
-send(_Socket, _Delay, 0) ->
-    ok;
+send(Socket, _Delay, 0) ->
+    io:format("~p pubserver is done.\n", [self()]),
+    ok = zmq:close(Socket);
 send(Socket, Delay, MsgIndex) ->
     Data = {msg, MsgIndex},
-    case zmq:send(Socket, term_to_binary(Data)) of 
-    ok -> 
+    case zmq:send(Socket, term_to_binary(Data)) of
+    ok ->
         io:format("~p sent ~p\n", [self(), Data]),
         timer:sleep(Delay),
         send(Socket, Delay, MsgIndex-1);
-    Other -> 
+    Other ->
         io:format("~p unexpected error in zmq:send(): ~p\n", [self(), Other])
     end.
