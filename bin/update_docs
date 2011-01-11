@@ -26,6 +26,6 @@ else
 fi
 set -e
 
-git co master
+git checkout master
 
 exit $ret
