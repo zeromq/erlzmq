@@ -409,6 +409,8 @@ encode_msg_socket(Type) ->
     case Type of
         pair        -> <<(?ZMQ_SOCKET):8, (?ZMQ_PAIR):8>>;
         pub         -> <<(?ZMQ_SOCKET):8, (?ZMQ_PUB):8>>;
+        push        -> <<(?ZMQ_SOCKET):8, (?ZMQ_PUSH):8>>;
+        pull        -> <<(?ZMQ_SOCKET):8, (?ZMQ_PULL):8>>;
         sub         -> <<(?ZMQ_SOCKET):8, (?ZMQ_SUB):8>>;
         req         -> <<(?ZMQ_SOCKET):8, (?ZMQ_REQ):8>>;
         rep         -> <<(?ZMQ_SOCKET):8, (?ZMQ_REP):8>>;
