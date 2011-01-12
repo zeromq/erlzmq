@@ -1,0 +1,9 @@
+{application, zmq,
+ [{description, "Erlang ZeroMQ binding"},
+  {vsn, "0.1"},
+  {modules, []},
+  {registered, []},
+  {applications, [kernel, stdlib]},
+  {included_applications, [crypto, sasl]},
+  {env, []}
+]}.

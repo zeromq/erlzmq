@@ -6,9 +6,7 @@ Building
 
     $ git clone git@github.com:zeromq/erlzmq.git
     $ cd erlzmq
-    $ ./bootstrap
-    $ ./configure --with-zeromq=/path/to/zeromq
-    $ make
+    $ make 
     $ make docs
 
 Documentation

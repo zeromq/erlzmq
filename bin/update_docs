@@ -1,4 +1,8 @@
 #!/bin/bash -e
+REPO		?= erlzmq
+ZMQ_TAG	 = $(shell git describe --tags)
+REVISION	?= $(shell echo $(ZMQ_TAG) | sed -e 's/^$(REPO)-//')
+PKG_VERSION	?= $(shell echo $(REVISION) | tr - .)
 FILE=$(readlink -f $0)
 DIR=${FILE%/*}
 DIR=${DIR%/*}
@@ -7,7 +11,7 @@ cd $DIR
 #trap "git co master" EXIT
 
 git checkout gh-pages
-git checkout master src vsn.mk
+git checkout master src $PKG_VERSION
 cd src
 make docs
 cd ..
@@ -29,3 +33,4 @@ set -e
 git co master
 
 exit $ret
+

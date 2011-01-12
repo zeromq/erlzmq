@@ -48,10 +48,10 @@ Obtain and build the latest version of zeromq:
   # Get and build 0MQ project
 
   $ cd /tmp
-  $ git clone git://github.com/sustrik/zeromq2.git zeromq
+  $ git clone git://github.com/zeromq/zeromq2.git zeromq
   
   $ cd zeromq
-  $ ./configure --with-pgm --prefix=/opt/zeromq-2.1.0
+  $ ./configure --with-pgm --prefix=/usr/local/zeromq-2.1.0
   $ make
   $ make install
 '''
@@ -69,8 +69,6 @@ Run:
   $ cd /tmp
   $ git clone git@github.com:zeromq/erlzmq.git
   $ cd /tmp/erlzmq
-  $ ./bootstrap
-  $ ./configure --with-zeromq=/opt/zeromq-2.1.0
   $ make
   $ make docs
 '''
@@ -86,13 +84,6 @@ update documentation on the [http://zeromq.github.com/erlzmq] site:
 
 ```
   $ make gitdocs
-'''
-
-The following make target can be used to do a cleanup of all artifacts 
-of make and configure:
-
-```
-  $ make clean-bootstrap
 '''
 
 == Architecture ==
