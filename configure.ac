@@ -151,7 +151,13 @@ AC_CHECK_HEADER([${ZEROMQ_LIB}/include/zmq.h], [], [
 Use the '--with-zeromq=PATH' option to specify location of ZeroMQ])])
 
 CXXFLAGS="${CXXFLAGS# } -I${with_zeromq}/include"
-LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq -Wl,-R${with_zeromq}/lib"
+
+case "${host_os}" in
+    *darwin*)
+        LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq";;
+    *)
+        LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq -Wl,-R${with_zeromq}/lib";;
+esac
 
 dnl ------------------------------------------------------------------
 dnl OS specific tests.
