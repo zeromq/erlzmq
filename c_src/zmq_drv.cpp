@@ -179,7 +179,19 @@ reply_ok_atom(ErlDrvPort port, ErlDrvTermData pid, ErlDrvTermData atom)
 static void
 reply_ok_events(ErlDrvPort port, ErlDrvTermData pid, uint32_t events)
 {
-    if ((ZMQ_POLLIN|ZMQ_POLLOUT) == events)
+    if (0 == events)
+    {
+        ErlDrvTermData spec[] = {
+            ERL_DRV_ATOM,   am_zmq_drv,
+            ERL_DRV_ATOM,   am_ok,
+            ERL_DRV_NIL,
+            ERL_DRV_LIST,   1,
+            ERL_DRV_TUPLE,  2,
+            ERL_DRV_TUPLE,  2
+        };
+        driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+    }
+    else if ((ZMQ_POLLIN|ZMQ_POLLOUT) == events)
     {
         ErlDrvTermData spec[] = {
             ERL_DRV_ATOM,   am_zmq_drv,
