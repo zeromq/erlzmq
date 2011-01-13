@@ -74,7 +74,7 @@ error_atom(int err)
         case ENODEV:          return am_enodev;
         default:
             assert(true);
-            return am_error;
+            return am_error; // Compiler complains otherwise.
     }
 }
 
@@ -446,8 +446,6 @@ wrap_zmq_setsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
     uint8_t        n = *bytes;
     const uint8_t* p =  bytes+1;
 
-    assert((sizeof(uint8_t) + n) == size);
-
     ErlDrvTermData caller = driver_caller(drv->port);
 
     if (drv->terminating)
@@ -470,7 +468,7 @@ wrap_zmq_setsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
     {
         int         opt        = *p++;
         uint64_t    optvallen  = *p++;
-        const void*  optval     = p;
+        const void* optval     =  p;
 
         switch (opt)
         {
@@ -488,7 +486,10 @@ wrap_zmq_setsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
             case ZMQ_LINGER:        assert(optvallen == 4);   break;
             case ZMQ_RECONNECT_IVL: assert(optvallen == 4);   break;
             case ZMQ_BACKLOG:       assert(optvallen == 4);   break;
+            default:                assert(true);
         }
+
+        assert(((p + optvalen) - bytes) <= size);
 
         zmqdrv_fprintf("setsockopt %p (opt: %d)\r\n", si->socket, opt);
 
@@ -552,6 +553,7 @@ wrap_zmq_getsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
         case ZMQ_FD:            optvallen = 4;  break;
         case ZMQ_EVENTS:        optvallen = 4;  break;
         case ZMQ_TYPE:          optvallen = 4;  break;
+        default:                assert(true);
     }
 
     if (0 != zmq_getsockopt(si->socket, opt, p, &optvallen))
