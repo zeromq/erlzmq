@@ -22,7 +22,6 @@
 
 #include <errno.h>
 #include <assert.h>
-#include <netinet/in.h> // ntohl()
 
 static ErlDrvTermData am_zmq_drv;
 static ErlDrvTermData am_ok;
@@ -122,7 +121,7 @@ reply_ok_binary(ErlDrvPort port, ErlDrvTermData pid, void *data, size_t size)
 
 //-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-reply_ok_int(ErlDrvPort port, ErlDrvTermData pid, int num)
+reply_ok_int(ErlDrvPort port, ErlDrvTermData pid, ErlDrvSInt num)
 {
     ErlDrvTermData spec[] = {
         ERL_DRV_ATOM,   am_zmq_drv,
@@ -136,12 +135,12 @@ reply_ok_int(ErlDrvPort port, ErlDrvTermData pid, int num)
 
 //-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-reply_ok_int64(ErlDrvPort port, ErlDrvTermData pid, int64_t num)
+reply_ok_int64(ErlDrvPort port, ErlDrvTermData pid, ErlDrvSInt64 num)
 {
     ErlDrvTermData spec[] = {
         ERL_DRV_ATOM,   am_zmq_drv,
         ERL_DRV_ATOM,   am_ok,
-        ERL_DRV_INT64,  num,
+        ERL_DRV_INT64,  TERM_DATA(&num),
         ERL_DRV_TUPLE,  2,
         ERL_DRV_TUPLE,  2
     };
@@ -150,12 +149,12 @@ reply_ok_int64(ErlDrvPort port, ErlDrvTermData pid, int64_t num)
 
 //-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 static void
-reply_ok_uint64(ErlDrvPort port, ErlDrvTermData pid, uint64_t num)
+reply_ok_uint64(ErlDrvPort port, ErlDrvTermData pid, ErlDrvUInt64 num)
 {
     ErlDrvTermData spec[] = {
         ERL_DRV_ATOM,   am_zmq_drv,
         ERL_DRV_ATOM,   am_ok,
-        ERL_DRV_UINT64, num,
+        ERL_DRV_UINT64, TERM_DATA(&num),
         ERL_DRV_TUPLE,  2,
         ERL_DRV_TUPLE,  2
     };
@@ -268,9 +267,9 @@ zmqcb_free_binary(void* /*data*/, void* hint)
 static void
 wrap_zmq_init(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    int io_threads  = (int)ntohl(*(uint32_t *)bytes);
+    int io_threads  = *bytes;
 
-    assert(sizeof(uint32_t) == size);
+    assert(sizeof(uint8_t) == size);
 
     zmqdrv_fprintf("init (io_threads: %d)\r\n", io_threads);
 
@@ -402,7 +401,7 @@ wrap_zmq_socket(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
     drv->zmq_pid_socket[caller] = si;
     drv->zmq_fd_socket[si->fd] = si;
 
-    zmqdrv_fprintf("socket %p owner %ld\r\n", si->socket, caller);
+    zmqdrv_fprintf("socket %p owner %lu\r\n", si->socket, caller);
 
     reply_ok(drv->port, caller);
 }
@@ -444,7 +443,7 @@ static void
 wrap_zmq_setsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
     uint8_t        n = *bytes;
-    const uint8_t* p =  bytes+1;
+    const uint8_t* p =  bytes+sizeof(uint8_t);
 
     ErlDrvTermData caller = driver_caller(drv->port);
 
@@ -472,20 +471,20 @@ wrap_zmq_setsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 
         switch (opt)
         {
-            case ZMQ_HWM:           assert(optvallen == 8);   break;
-            case ZMQ_SWAP:          assert(optvallen == 8);   break;
-            case ZMQ_AFFINITY:      assert(optvallen == 8);   break;
-            case ZMQ_IDENTITY:      assert(optvallen < 256);  break;
-            case ZMQ_SUBSCRIBE:     assert(optvallen < 256);  break;
-            case ZMQ_UNSUBSCRIBE:   assert(optvallen < 256);  break;
-            case ZMQ_RATE:          assert(optvallen == 8);   break;
-            case ZMQ_RECOVERY_IVL:  assert(optvallen == 8);   break;
-            case ZMQ_MCAST_LOOP:    assert(optvallen == 8);   break;
-            case ZMQ_SNDBUF:        assert(optvallen == 8);   break;
-            case ZMQ_RCVBUF:        assert(optvallen == 8);   break;
-            case ZMQ_LINGER:        assert(optvallen == 4);   break;
-            case ZMQ_RECONNECT_IVL: assert(optvallen == 4);   break;
-            case ZMQ_BACKLOG:       assert(optvallen == 4);   break;
+            case ZMQ_HWM:           assert(optvallen == sizeof(uint64_t));break;
+            case ZMQ_SWAP:          assert(optvallen == sizeof(int64_t)); break;
+            case ZMQ_AFFINITY:      assert(optvallen == sizeof(uint64_t));break;
+            case ZMQ_IDENTITY:      assert(optvallen <= 255);             break;
+            case ZMQ_SUBSCRIBE:     break; // While the erlang layer limits this to 255, there is no zmq limit
+            case ZMQ_UNSUBSCRIBE:   break; // While the erlang layer limits this to 255, there is no zmq limit
+            case ZMQ_RATE:          assert(optvallen == sizeof(int64_t)); break;
+            case ZMQ_RECOVERY_IVL:  assert(optvallen == sizeof(int64_t)); break;
+            case ZMQ_MCAST_LOOP:    assert(optvallen == sizeof(int64_t)); break;
+            case ZMQ_SNDBUF:        assert(optvallen == sizeof(uint64_t));break;
+            case ZMQ_RCVBUF:        assert(optvallen == sizeof(uint64_t));break;
+            case ZMQ_LINGER:        assert(optvallen == sizeof(int));     break; // Erlang layer assumes 32bit
+            case ZMQ_RECONNECT_IVL: assert(optvallen == sizeof(int));     break; // Erlang layer assumes 32bit
+            case ZMQ_BACKLOG:       assert(optvallen == sizeof(int));     break; // Erlang layer assumes 32bit
             default:                assert(true);
         }
 
@@ -537,22 +536,22 @@ wrap_zmq_getsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 
     switch (opt)
     {
-        case ZMQ_HWM:           optvallen = 8;  break;
-        case ZMQ_SWAP:          optvallen = 8;  break;
-        case ZMQ_AFFINITY:      optvallen = 8;  break;
-        case ZMQ_IDENTITY:      optvallen = 255;break;
-        case ZMQ_RATE:          optvallen = 8;  break;
-        case ZMQ_RECOVERY_IVL:  optvallen = 8;  break;
-        case ZMQ_MCAST_LOOP:    optvallen = 8;  break;
-        case ZMQ_SNDBUF:        optvallen = 8;  break;
-        case ZMQ_RCVBUF:        optvallen = 8;  break;
-        case ZMQ_RCVMORE:       optvallen = 8;  break;
-        case ZMQ_LINGER:        optvallen = 4;  break;
-        case ZMQ_RECONNECT_IVL: optvallen = 4;  break;
-        case ZMQ_BACKLOG:       optvallen = 4;  break;
-        case ZMQ_FD:            optvallen = 4;  break;
-        case ZMQ_EVENTS:        optvallen = 4;  break;
-        case ZMQ_TYPE:          optvallen = 4;  break;
+        case ZMQ_HWM:           optvallen = sizeof(uint64_t); break;
+        case ZMQ_SWAP:          optvallen = sizeof(int64_t);  break;
+        case ZMQ_AFFINITY:      optvallen = sizeof(uint64_t); break;
+        case ZMQ_IDENTITY:      optvallen = sizeof(optval);   break;
+        case ZMQ_RATE:          optvallen = sizeof(int64_t);  break;
+        case ZMQ_RECOVERY_IVL:  optvallen = sizeof(int64_t);  break;
+        case ZMQ_MCAST_LOOP:    optvallen = sizeof(int64_t);  break;
+        case ZMQ_SNDBUF:        optvallen = sizeof(uint64_t); break;
+        case ZMQ_RCVBUF:        optvallen = sizeof(uint64_t); break;
+        case ZMQ_RCVMORE:       optvallen = sizeof(int64_t);  break;
+        case ZMQ_LINGER:        optvallen = sizeof(int);      break;
+        case ZMQ_RECONNECT_IVL: optvallen = sizeof(int);      break;
+        case ZMQ_BACKLOG:       optvallen = sizeof(int);      break;
+        case ZMQ_FD:            optvallen = sizeof(int);      break;
+        case ZMQ_EVENTS:        optvallen = sizeof(uint32_t); break;
+        case ZMQ_TYPE:          optvallen = sizeof(int);      break;
         default:                assert(true);
     }
 
@@ -604,8 +603,6 @@ wrap_zmq_getsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
             reply_ok_binary(drv->port, caller, p, optvallen);
             break;
     }
-
-    return;
 }
 
 //-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -615,7 +612,8 @@ wrap_zmq_bind(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
     // expects the address to be zero terminated
     char* addr  = (char*)bytes;
 
-    assert(1 <= size); // ? could check for zero termination within size limit
+    // TODO: check for zero termination within size limit
+    assert(sizeof(char) <= size); // Must always have at least the 0 terminating char.
 
     ErlDrvTermData caller = driver_caller(drv->port);
 
@@ -651,7 +649,8 @@ wrap_zmq_connect(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
     // expects the address to be zero terminated
     char* addr  = (char*)bytes;
 
-    assert(1 <= size); // ? could check for zero termination within size limit
+    // TODO: check for zero termination within size limit
+    assert(sizeof(char) <= size); // Must always have at least the 0 terminating char.
 
     ErlDrvTermData caller = driver_caller(drv->port);
 
@@ -684,11 +683,11 @@ wrap_zmq_connect(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 static void
 wrap_zmq_send(zmq_drv_t *drv, const uint8_t* bytes, size_t size, ErlDrvBinary* bin)
 {
-    uint32_t  flags     = ntohl(*(uint32_t*)bytes);
-    void*     data      = (void *)(bytes+sizeof(uint32_t));
-    size_t    data_size = size - sizeof(uint32_t);
+    int     flags     = *bytes;
+    void*   data      = (void *)(bytes+sizeof(uint8_t));
+    size_t  data_size = size - sizeof(uint8_t);
 
-    assert(sizeof(uint32_t) <= size);
+    assert(sizeof(uint8_t) <= size);
 
     ErlDrvTermData caller = driver_caller(drv->port);
 
@@ -708,7 +707,7 @@ wrap_zmq_send(zmq_drv_t *drv, const uint8_t* bytes, size_t size, ErlDrvBinary* b
 
     assert(0 == si->out_caller);
 
-    zmqdrv_fprintf("send %p (flags: %u bytes: %u)\r\n", si->socket, flags, data_size);
+    zmqdrv_fprintf("send %p (flags: %d bytes: %u)\r\n", si->socket, flags, data_size);
 
     if (si->out_caller || si->in_caller)
     {
@@ -758,9 +757,9 @@ wrap_zmq_send(zmq_drv_t *drv, const uint8_t* bytes, size_t size, ErlDrvBinary* b
 static void
 wrap_zmq_recv(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    uint32_t flags = ntohl(*(uint32_t*)bytes);
+    int flags = *bytes;
 
-    assert(sizeof(uint32_t) == size);
+    assert(sizeof(uint8_t) == size);
 
     ErlDrvTermData caller = driver_caller(drv->port);
 
@@ -780,7 +779,7 @@ wrap_zmq_recv(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 
     assert(0 == si->in_caller);
 
-    zmqdrv_fprintf("recv %p (flags: %u)\r\n", si->socket, flags);
+    zmqdrv_fprintf("recv %p (flags: %d)\r\n", si->socket, flags);
 
     zmq_msg_t msg;
     zmq_msg_init(&msg);
@@ -818,7 +817,7 @@ wrap_zmq_poll(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
     uint32_t events = *bytes;
 
-    assert(sizeof(uint32_t) == size);
+    assert(sizeof(uint8_t) == size);
 
     ErlDrvTermData caller = driver_caller(drv->port);
 
@@ -920,7 +919,7 @@ zmqdrv_driver_init(void)
 static ErlDrvData
 zmqdrv_start(ErlDrvPort port, char* /*cmd*/)
 {
-    zmqdrv_fprintf("zmq port driver started by pid %ld\r\n", driver_connected(port));
+    zmqdrv_fprintf("zmq port driver started by pid %lu\r\n", driver_connected(port));
     return reinterpret_cast<ErlDrvData>(new zmq_drv_t(port));
 }
 

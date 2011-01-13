@@ -181,8 +181,8 @@ encode_getsockopt(Option) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-encode_init(IoThreads) when is_integer(IoThreads) ->
-  <<(?ZMQ_INIT):8, IoThreads:32>>
+encode_init(IoThreads) when is_integer(IoThreads), IoThreads =< 255 ->
+  <<(?ZMQ_INIT):8, IoThreads:8>>
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -192,12 +192,12 @@ encode_poll(Events) when is_list(Events) ->
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 encode_recv(Flags) when is_list(Flags) ->
-  <<(?ZMQ_RECV):8, (flags_to_int(Flags)):32>>
+  <<(?ZMQ_RECV):8, (flags_to_int(Flags)):8>>
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 encode_send(Data, Flags) when is_binary(Data), is_list(Flags) ->
-  <<(?ZMQ_SEND):8, (flags_to_int(Flags)):32, Data/binary>>
+  <<(?ZMQ_SEND):8, (flags_to_int(Flags)):8, Data/binary>>
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
