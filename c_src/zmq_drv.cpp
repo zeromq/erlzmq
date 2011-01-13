@@ -489,7 +489,7 @@ wrap_zmq_setsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
             default:                assert(true);
         }
 
-        assert(((p + optvalen) - bytes) <= size);
+        assert((size_t)((uint8_t*)(p + optvallen) - bytes) <= size);
 
         zmqdrv_fprintf("setsockopt %p (opt: %d)\r\n", si->socket, opt);
 
