@@ -371,6 +371,8 @@ wrap_zmq_socket(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
         return;
     }
 
+    assert(NULL == drv->get_socket_info(caller));
+
     void* s = zmq_socket(drv->zmq_context, type);
 
     if (!s)
