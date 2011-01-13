@@ -50,7 +50,7 @@ enum driver_commands
 struct zmq_sock_info
 {
     void*           socket;       // 0MQ socket handle
-    int             fd;           // Signaling fd for this socket
+    ErlDrvEvent     fd;           // Signaling fd for this socket
     ErlDrvMonitor   monitor;      // Owner process monitor
     int             in_flags;     // Read flags for the pending request
     ErlDrvTermData  in_caller;    // Caller's pid of the last blocking recv() command
@@ -61,8 +61,8 @@ struct zmq_sock_info
     ErlDrvTermData  poll_caller;  // Caller's pid of the last poll() command
     bool            busy;         // true if port has a pending operation, else false
 
-    zmq_sock_info(void* _s, int _sig_fd)
-        :socket(_s), fd(_sig_fd)
+    zmq_sock_info(void* _s, ErlDrvEvent _fd)
+        :socket(_s), fd(_fd)
         ,in_flags(0), in_caller(0)
         ,out_flags(0), out_caller(0)
         ,poll_events(0), poll_caller(0)
@@ -79,7 +79,7 @@ struct zmq_sock_info
     static void  operator delete (void* p)   { driver_free(p); }
 };
 
-typedef std::map<int,             zmq_sock_info*>     zmq_fd_socket_map_t;
+typedef std::map<ErlDrvEvent,     zmq_sock_info*>     zmq_fd_socket_map_t;
 typedef std::map<ErlDrvTermData,  zmq_sock_info*>     zmq_pid_socket_map_t;
 
 // Driver state structure
@@ -106,7 +106,7 @@ struct zmq_drv_t
             if (si->busy)
             {
                 // Remove socket from erlang vm polling
-                driver_select(port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 0);
+                driver_select(port, si->fd, ERL_DRV_READ, 0);
             }
 
             delete si;
@@ -127,7 +127,7 @@ struct zmq_drv_t
         return it == zmq_pid_socket.end() ? NULL : it->second;
     }
 
-    zmq_sock_info* get_socket_info(int fd)
+    zmq_sock_info* get_socket_info(ErlDrvEvent fd)
     {
         zmq_fd_socket_map_t::const_iterator it = zmq_fd_socket.find(fd);
         return it == zmq_fd_socket.end() ? NULL : it->second;

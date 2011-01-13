@@ -310,7 +310,7 @@ wrap_zmq_term(zmq_drv_t *drv)
             if (si->busy)
             {
                 // Remove socket from erlang vm polling
-                driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 0);
+                driver_select(drv->port, si->fd, ERL_DRV_READ, 0);
 
                 if (si->out_caller)
                 {
@@ -390,7 +390,7 @@ wrap_zmq_socket(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
         return;
     }
 
-    zmq_sock_info* si = new zmq_sock_info(s, fd);
+    zmq_sock_info* si = new zmq_sock_info(s, (ErlDrvEvent)fd);
 
     if (!si)
     {
@@ -427,7 +427,7 @@ wrap_zmq_close(zmq_drv_t *drv)
     if (si->busy)
     {
         // Remove socket from vm polling
-        driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 0);
+        driver_select(drv->port, si->fd, ERL_DRV_READ, 0);
     }
 
     drv->zmq_pid_socket.erase(caller);
@@ -743,7 +743,7 @@ wrap_zmq_send(zmq_drv_t *drv, const uint8_t* bytes, size_t size, ErlDrvBinary* b
 
         if (!si->busy)
         {
-            driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 1);
+            driver_select(drv->port, si->fd, ERL_DRV_READ, 1);
             si->busy = true;
         }
     }
@@ -800,7 +800,7 @@ wrap_zmq_recv(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 
         if (!si->busy)
         {
-            driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 1);
+            driver_select(drv->port, si->fd, ERL_DRV_READ, 1);
             si->busy = true;
         }
     }
@@ -868,7 +868,7 @@ wrap_zmq_poll(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
             si->poll_events = events;
             si->poll_caller = caller;
             si->busy = true;
-            driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 1);
+            driver_select(drv->port, si->fd, ERL_DRV_READ, 1);
         }
     }
     else
@@ -938,7 +938,7 @@ static void
 zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
 {
     zmq_drv_t *drv = reinterpret_cast<zmq_drv_t*>(handle);
-    zmq_sock_info *si = drv->get_socket_info((int)event);
+    zmq_sock_info *si = drv->get_socket_info(event);
 
     // I'm not sure if a race condition could develop here or not
     // So let's assert and see if we ever hit it.  Hopefully not.
@@ -947,7 +947,7 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
     assert(si->busy);
 
     // unregister event with erlang vm while we work with the socket
-    driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 0);
+    driver_select(drv->port, si->fd, ERL_DRV_READ, 0);
 
     // Finish blocking recv request if input is ready
     if (si->in_caller)
@@ -1029,7 +1029,7 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
     // reregister event with erlang vm if any pending operations exist
     if (si->poll_caller || si->in_caller || si->out_caller)
     {
-        driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 1);
+        driver_select(drv->port, si->fd, ERL_DRV_READ, 1);
     }
     else
     {
@@ -1057,7 +1057,7 @@ zmqdrv_process_exit(ErlDrvData handle, ErlDrvMonitor* monitor)
     if (si->busy)
     {
         // Remove socket from vm polling
-        driver_select(drv->port, (ErlDrvEvent)si->fd, ERL_DRV_READ, 0);
+        driver_select(drv->port, si->fd, ERL_DRV_READ, 0);
     }
 
     drv->zmq_pid_socket.erase(pid);
