@@ -135,7 +135,7 @@ init(Name, IoThreads) when is_atom(Name), is_integer(IoThreads) ->
 %%      and/or 'pollout' or 'pollerr'.
 %% @spec (Socket, Events) -> ok | {error, Reason}
 %%          Events = [Event]
-%%          Event = pollin | pollout
+%%          Event = pollin | pollout | pollerr
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 poll(Socket, Events) when is_list(Events) ->
@@ -164,7 +164,8 @@ recv(Socket) ->
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% @doc Send a message to a given 0MQ socket without blocking.
-%% @spec (Socket, [binary()], noblock) -> ok | {error, Reason}
+%% @spec (Socket, Data, noblock) -> ok | {error, Reason}
+%%          Data = binary() | [binary()]
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 send(Socket, Data, noblock) when is_binary(Data); is_list(Data) andalso 0 < length(Data) ->
