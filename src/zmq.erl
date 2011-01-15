@@ -9,6 +9,19 @@
 %% @copyright 2010 Dhammika Pathirana and Serge Aleynikov, 2011 Chris Rempel
 %% @version {@version}
 %% @end
+%%------------------------------------------------------------------------------
+%% @type zmq_context() = pid() | atom().
+%% @type zmq_error()   = ebusy | enosys | edead | eterm | efault | einval
+%%                     | eagain | enotsup | efsm | emthread | eprotonosupport
+%%                     | enocompatproto | eaddrinuse | eaddrnotavail | enodev
+%% @type zmq_event()   = pollin | pollout | pollerr.
+%% @type zmq_socket()  = pid() | atom().
+%% @type zmq_socket_type() =
+%%                 pair |
+%%                 pub  | sub | xpub | xsub |
+%%                 req  | rep | xreq | xrep |
+%%                 pull | push.
+%% @end
 %%==============================================================================
 -module(zmq).
 
@@ -41,7 +54,7 @@
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% @doc Bind a 0MQ socket to the given endpoint.
-%% @spec (Socket, Endpoint) -> ok | {error, Reason} 
+%% @spec (zmq_socket(), Endpoint) -> ok | {error, zmq_error()}
 %%          Endpoint = string() | binary()
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -54,7 +67,7 @@ bind(Socket, Endpoint) when is_binary(Endpoint) ->
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% @doc Close a 0MQ socket.
-%% @spec (Socket) -> ok | {error, Reason}
+%% @spec (zmq_socket()) -> ok | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 close(Socket) ->
@@ -63,7 +76,7 @@ close(Socket) ->
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% @doc Connect a 0MQ socket to the given endpoint.
-%% @spec (Socket, Endpoint) -> ok | {error, Reason}
+%% @spec (zmq_socket(), Endpoint) -> ok | {error, zmq_error()}
 %%          Endpoint = string() | binary()
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -75,8 +88,8 @@ connect(Socket, Endpoint) when is_binary(Endpoint) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Format returned error atom.
-%% @spec (atom()) -> string()
+%% @doc Format returned 0MQ error atom into an error message string.
+%% @spec (Error::zmq_error()) -> string()
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% Erlang Binding Specific
@@ -102,9 +115,15 @@ format_error(eaddrnotavail)     -> "The requested address is not local";
 format_error(enodev)            -> "The requested address specifies a nonexistent interface".
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Get socket option.
-%% @spec (Socket, Option) -> {ok, Value} | {error, Reason}
-%%          Option = zmq_sockopt()
+%% @doc Get the value for the given 0MQ socket option.
+%% @spec (zmq_socket(), atom()) -> {ok, Value} | {error, zmq_error()}
+%%          Option = hwm | swap | affinity | identity | rate
+%%                 | recovery_ivl | mcast_loop | sndbuf | rcvbuf | rcvmore
+%%                 | linger | reconnect_ivl | backlog | fd | events | type
+%%          Value = integer() | integer() | integer() | binary() | integer()
+%%                | integer() | boolean() | integer() | integer() | boolean()
+%%                | integer() | integer() | integer() | integer()
+%%                | [zmq_event()] | zmq_socket_type()
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 getsockopt(Socket, Option) when is_atom(Option) ->
@@ -112,8 +131,8 @@ getsockopt(Socket, Option) when is_atom(Option) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Initialize owned 0MQ Context.
-%% @spec (IoThreads) -> {ok, Context} | {error, Error}
+%% @doc Initialize 0MQ context.
+%% @spec (integer()) -> {ok, Context::pid()} | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 init(IoThreads) when is_integer(IoThreads) ->
@@ -121,9 +140,10 @@ init(IoThreads) when is_integer(IoThreads) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Initialize owned named 0MQ Context. Name can be used as the Context in
-%%      zmq:socket/2 and zmq:term/1.
-%% @spec (Name, IoThreads) -> {ok, Context} | {error, Error}
+%% @doc Initialize 0MQ context. `Name' can be used as the `Context' in
+%%      {@link {@module}:socket/2} and {@link {@module}:term/1}.  Typical use of
+%%      this call is wrapping for placement in a supervision tree.
+%% @spec (atom(), integer()) -> {ok, Context::pid()} | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 init(Name, IoThreads) when is_atom(Name), is_integer(IoThreads) ->
@@ -131,12 +151,9 @@ init(Name, IoThreads) when is_atom(Name), is_integer(IoThreads) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Poll for socket events.  Events are received in the caller's mailbox
-%%      as {zmq, Socket, REvents}. Where REvents is a list containing 'pollin'
-%%      and/or 'pollout' or 'pollerr'.
-%% @spec (Socket, Events) -> ok | {error, Reason}
-%%          Events = [Event]
-%%          Event = pollin | pollout | pollerr
+%% @doc Poll for 0MQ socket events.  Events are received in the caller's mailbox
+%%      as {@type {zmq, Socket::pid(), REvents::[zmq_event()]@}}.
+%% @spec (zmq_socket(), [zmq_event()]) -> ok | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 poll(Socket, Events) when is_list(Events) ->
@@ -144,9 +161,9 @@ poll(Socket, Events) when is_list(Events) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Receive a message from a given 0MQ socket without blocking.
-%% @spec (Socket, noblock) -> {ok, Data} | {error, Reason}
-%%         Data = binary() | [binary()]
+%% @doc Receive a message from the given 0MQ socket without blocking.
+%% @spec (zmq_socket(), Flag::noblock) -> {ok, Data} | {error, zmq_error()}
+%%          Data = binary() | [binary()]
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 recv(Socket, noblock) ->
@@ -154,9 +171,9 @@ recv(Socket, noblock) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Receive a message from a given 0MQ socket.
-%% @spec (Socket) -> {ok, Data} | {error, Reason}
-%%         Data = binary() | [binary()]
+%% @doc Receive a message from the given 0MQ socket.
+%% @spec (zmq_socket()) -> {ok, Data} | {error, zmq_error()}
+%%          Data = binary() | [binary()]
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 recv(Socket) ->
@@ -164,8 +181,8 @@ recv(Socket) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Send a message to a given 0MQ socket without blocking.
-%% @spec (Socket, Data, noblock) -> ok | {error, Reason}
+%% @doc Send a message to the given 0MQ socket without blocking.
+%% @spec (zmq_socket(), Data, Flag::noblock) -> ok | {error, zmq_error()}
 %%          Data = binary() | [binary()]
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -174,8 +191,8 @@ send(Socket, Data, noblock) when is_binary(Data); is_list(Data), 0 < length(Data
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Send a message to a given 0MQ socket.
-%% @spec (Socket, Data) -> ok | {error, Reason}
+%% @doc Send a message to the given 0MQ socket.
+%% @spec (zmq_socket(), Data) -> ok | {error, zmq_error()}
 %%          Data = binary() | [binary()]
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -184,9 +201,22 @@ send(Socket, Data) when is_binary(Data); is_list(Data), 0 < length(Data)  ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Set socket options.
-%% @spec (Socket, Options) -> ok | {error, Reason}
-%%          Options = [{zmq_sockopt(), Value}]
+%% @doc Set 0MQ socket options.
+%% @spec (zmq_socket(), [Option]) -> ok | {error, zmq_error()}
+%%          Option = {hwm, integer()}
+%%                 | {swap, integer()}
+%%                 | {affinity, integer()}
+%%                 | {identity, binary()}
+%%                 | {subscribe, binary()}
+%%                 | {unsubscibe, binary()}
+%%                 | {rate, integer()}
+%%                 | {recovery_ivl, integer()}
+%%                 | {mcast_loop, boolean()}
+%%                 | {sndbuf, integer()}
+%%                 | {rcvbuf, integer()}
+%%                 | {linger, integer()}
+%%                 | {reconnect_ivl, integer()}
+%%                 | {backlog, integer()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 setsockopt(Socket, Options) when is_list(Options) ->
@@ -195,11 +225,7 @@ setsockopt(Socket, Options) when is_list(Options) ->
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% @doc Create a 0MQ socket.
-%% @spec (Context, Type) -> {ok, Socket} | {error, Reason}
-%%          Type = pair |
-%%                 pub  | sub | xpub | xsub |
-%%                 req  | rep | xreq | xrep |
-%%                 pull | push
+%% @spec (zmq_context(), zmq_socket_type()) -> {ok, Socket::pid()} | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 socket(Context, Type) when is_pid(Context) orelse is_atom(Context), is_atom(Type) ->
@@ -207,12 +233,10 @@ socket(Context, Type) when is_pid(Context) orelse is_atom(Context), is_atom(Type
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Create a 0MQ socket.  Name can be used as the Socket in other zmq api.
-%% @spec (Context, Name, Type) -> {ok, Socket} | {error, Reason}
-%%          Type = pair |
-%%                 pub  | sub | xpub | xsub |
-%%                 req  | rep | xreq | xrep |
-%%                 pull | push
+%% @doc Create a 0MQ socket. `Name' can be used as the `Socket' in other
+%%      `{@module}' module calls.  Typical use of this call is wrapping for
+%%      placement in a supervision tree.
+%% @spec (zmq_context(), atom(), zmq_socket_type()) -> {ok, Socket::pid()} | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 socket(Context, Name, Type) when is_pid(Context) orelse is_atom(Context), is_atom(Name), is_atom(Type) ->
@@ -220,8 +244,8 @@ socket(Context, Name, Type) when is_pid(Context) orelse is_atom(Context), is_ato
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Terminate 0MQ Context
-%% @spec (Context) -> ok | {error, eagain}
+%% @doc Terminate 0MQ context
+%% @spec (zmq_context()) -> ok | {error, eagain}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 term(Context) ->
