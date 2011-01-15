@@ -28,6 +28,7 @@
   send/3,
   setsockopt/2,
   socket/2,
+  socket/3,
   term/1
 ]).
 
@@ -120,13 +121,13 @@ init(IoThreads) when is_integer(IoThreads) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Initialize unowned named 0MQ Context. Name can be used as the Context in
+%% @doc Initialize owned named 0MQ Context. Name can be used as the Context in
 %%      zmq:socket/2 and zmq:term/1.
 %% @spec (Name, IoThreads) -> {ok, Context} | {error, Error}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 init(Name, IoThreads) when is_atom(Name), is_integer(IoThreads) ->
-  gen_server:start({local, Name}, zmq_context, [{iothreads, IoThreads}], [])
+  gen_server:start_link({local, Name}, zmq_context, [{owner, self()}, {iothreads, IoThreads}], [])
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -203,6 +204,19 @@ setsockopt(Socket, Options) when is_list(Options) ->
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 socket(Context, Type) when is_pid(Context) orelse is_atom(Context), is_atom(Type) ->
   gen_server:start_link(zmq_socket, [{owner, self()}, {context, Context}, {type, Type}], [])
+.
+
+%%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+%% @doc Create a 0MQ socket.  Name can be used as the Socket in other zmq api.
+%% @spec (Context, Name, Type) -> {ok, Socket} | {error, Reason}
+%%          Type = pair |
+%%                 pub  | sub | xpub | xsub |
+%%                 req  | rep | xreq | xrep |
+%%                 pull | push
+%% @end
+%%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+socket(Context, Name, Type) when is_pid(Context) orelse is_atom(Context), is_atom(Name), is_atom(Type) ->
+  gen_server:start_link({local, Name}, zmq_socket, [{owner, self()}, {context, Context}, {type, Type}], [])
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
