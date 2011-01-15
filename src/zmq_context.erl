@@ -94,12 +94,10 @@ init(Config) when is_list(Config) ->
 handle_call(port, _From, State) ->
   {reply, {ok, State#state.port}, State}
 ;
-handle_call(term, From, State) ->
+handle_call(term, _From, State) ->
   case zmq_drv:term(State#state.port) of
     {error, eagain} -> {reply, {error, eagain}, State};
-    _ ->
-      gen_server:reply(From, ok),
-      {stop, normal, State}
+    _ -> {stop, normal, ok, State}
   end
 ;
 handle_call(Request, From, State) ->
