@@ -168,7 +168,7 @@ recv(Socket) ->
 %%          Data = binary() | [binary()]
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-send(Socket, Data, noblock) when is_binary(Data); is_list(Data) andalso 0 < length(Data) ->
+send(Socket, Data, noblock) when is_binary(Data); is_list(Data), 0 < length(Data) ->
   gen_server:call(Socket, {send, [Data, [noblock]]}, ?SOCKET_TIMEOUT)
 .
 
@@ -178,7 +178,7 @@ send(Socket, Data, noblock) when is_binary(Data); is_list(Data) andalso 0 < leng
 %%          Data = binary() | [binary()]
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-send(Socket, Data) when is_binary(Data); is_list(Data) andalso 0 < length(Data)  ->
+send(Socket, Data) when is_binary(Data); is_list(Data), 0 < length(Data)  ->
   gen_server:call(Socket, {send, [Data, []]}, ?SOCKET_TIMEOUT)
 .
 
@@ -201,7 +201,7 @@ setsockopt(Socket, Options) when is_list(Options) ->
 %%                 pull | push
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-socket(Context, Type) when is_atom(Type); is_pid(Context) orelse is_atom(Context) ->
+socket(Context, Type) when is_pid(Context) orelse is_atom(Context), is_atom(Type) ->
   gen_server:start_link(zmq_socket, [{owner, self()}, {context, Context}, {type, Type}], [])
 .
 
