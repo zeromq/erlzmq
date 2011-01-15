@@ -107,14 +107,14 @@ getsockopt(Port, Option) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-bind(Port, Address) ->
-  port_command(Port, encode_bind(Address)),
+bind(Port, Endpoint) ->
+  port_command(Port, encode_bind(Endpoint)),
   receive {?DRIVER_NAME, Result} -> Result end
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-connect(Port, Address) ->
-  port_command(Port, encode_connect(Address)),
+connect(Port, Endpoint) ->
+  port_command(Port, encode_connect(Endpoint)),
   receive {?DRIVER_NAME, Result} -> Result end
 .
 
@@ -141,9 +141,9 @@ poll(Port, Events) ->
 %%-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-encode_bind(Address) when is_binary(Address) ->
-  %% Must zero terminate the address.
-  <<(?ZMQ_BIND):8, Address/binary, 0>>
+encode_bind(Endpoint) when is_binary(Endpoint) ->
+  %% Must zero terminate the Endpoint.
+  <<(?ZMQ_BIND):8, Endpoint/binary, 0>>
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -152,9 +152,9 @@ encode_close() ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-encode_connect(Address) when is_binary(Address) ->
-  %% Must zero terminate the address.
-  <<(?ZMQ_CONNECT):8, Address/binary, 0>>
+encode_connect(Endpoint) when is_binary(Endpoint) ->
+  %% Must zero terminate the Endpoint.
+  <<(?ZMQ_CONNECT):8, Endpoint/binary, 0>>
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~

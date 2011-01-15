@@ -621,8 +621,8 @@ wrap_zmq_getsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 static void
 wrap_zmq_bind(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    // expects the address to be zero terminated
-    char* addr  = (char*)bytes;
+    // expects the endpoint to be zero terminated
+    char* endpoint  = (char*)bytes;
 
     // TODO: check for zero termination within size limit
     assert(sizeof(char) <= size); // Must always have at least the 0 terminating char.
@@ -643,9 +643,9 @@ wrap_zmq_bind(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
         return;
     }
 
-    zmqdrv_fprintf("bind %p (addr: %s)\r\n", si->socket, addr);
+    zmqdrv_fprintf("bind %p (endpoint: %s)\r\n", si->socket, endpoint);
 
-    if (0 != zmq_bind(si->socket, addr))
+    if (0 != zmq_bind(si->socket, endpoint))
     {
         reply_error(drv->port, caller, zmq_errno());
         return;
@@ -658,8 +658,8 @@ wrap_zmq_bind(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 static void
 wrap_zmq_connect(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 {
-    // expects the address to be zero terminated
-    char* addr  = (char*)bytes;
+    // expects the endpoint to be zero terminated
+    char* endpoint  = (char*)bytes;
 
     // TODO: check for zero termination within size limit
     assert(sizeof(char) <= size); // Must always have at least the 0 terminating char.
@@ -680,9 +680,9 @@ wrap_zmq_connect(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
         return;
     }
 
-    zmqdrv_fprintf("connect %p (addr: %s)\r\n", si->socket, addr);
+    zmqdrv_fprintf("connect %p (endpoint: %s)\r\n", si->socket, endpoint);
 
-    if (0 != zmq_connect(si->socket, addr))
+    if (0 != zmq_connect(si->socket, endpoint))
     {
         reply_error(drv->port, caller, zmq_errno());
         return;

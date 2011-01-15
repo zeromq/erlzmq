@@ -39,16 +39,16 @@
 %%-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Bind a 0MQ socket to address.
-%% @spec (Socket, Address) -> ok | {error, Reason}
-%%          Address = string() | binary()
+%% @doc Bind a 0MQ socket to the given endpoint.
+%% @spec (Socket, Endpoint) -> ok | {error, Reason} 
+%%          Endpoint = string() | binary()
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-bind(Socket, Address) when is_list(Address) ->
-  bind(Socket, list_to_binary(Address))
+bind(Socket, Endpoint) when is_list(Endpoint) ->
+  bind(Socket, list_to_binary(Endpoint))
 ;
-bind(Socket, Address) when is_binary(Address) ->
-  gen_server:call(Socket, {bind, [Address]}, ?SOCKET_TIMEOUT)
+bind(Socket, Endpoint) when is_binary(Endpoint) ->
+  gen_server:call(Socket, {bind, [Endpoint]}, ?SOCKET_TIMEOUT)
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -61,16 +61,16 @@ close(Socket) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Connect a 0MQ socket to address.
-%% @spec (Socket, Address) -> ok | {error, Reason}
-%%          Address = string() | binary()
+%% @doc Connect a 0MQ socket to the given endpoint.
+%% @spec (Socket, Endpoint) -> ok | {error, Reason}
+%%          Endpoint = string() | binary()
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-connect(Socket, Address) when is_list(Address) ->
-  connect(Socket, list_to_binary(Address))
+connect(Socket, Endpoint) when is_list(Endpoint) ->
+  connect(Socket, list_to_binary(Endpoint))
 ;
-connect(Socket, Address) when is_binary(Address) ->
-  gen_server:call(Socket, {connect, [Address]}, ?SOCKET_TIMEOUT)
+connect(Socket, Endpoint) when is_binary(Endpoint) ->
+  gen_server:call(Socket, {connect, [Endpoint]}, ?SOCKET_TIMEOUT)
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
