@@ -721,13 +721,6 @@ wrap_zmq_send(zmq_drv_t *drv, const uint8_t* bytes, size_t size, ErlDrvBinary* b
 
     zmqdrv_fprintf("send %p (flags: %d bytes: %u)\r\n", si->socket, flags, data_size);
 
-    if (si->out_caller || si->in_caller)
-    {
-        // There's still a blocking send/recv pending
-        reply_error(drv->port, caller, EBUSY);
-        return;
-    }
-
     // Increment the reference count on binary so that zmq can take ownership of it.
     driver_binary_inc_refc(bin);
 
