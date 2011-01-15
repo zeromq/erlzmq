@@ -64,12 +64,11 @@ init(Config) ->
   {ok, Port} = gen_server:call(Context, port, infinity),
   case zmq_drv:socket(Port, Type) of
     ok ->
-      %% Support looking up context by registered name.
-      Contextref = case Context of
-        RegName when is_atom(RegName) -> erlang:monitor(process, whereis(RegName));
-        Context -> erlang:monitor(process, Context)
-      end,
-      {ok, #state{owner = Owner, port = Port, contextref = Contextref}}
+      {ok, #state{
+        owner = Owner,
+        port = Port,
+        contextref = erlang:monitor(process, Context)
+      }}
     ;
     Error -> {stop, Error}
   end
