@@ -157,8 +157,9 @@ handle_info({'EXIT', Owner, Reason}, #state{owner=Owner} = State) ->
 handle_info({'DOWN', Contextref, process, _, Reason}, #state{contextref=Contextref} = State) ->
   {stop, {context_died, Reason}, State#state{contextref = undefined}}
 ;
-handle_info(Info, State) ->
-  {stop, {unhandled_info, Info}, State}
+handle_info(_Info, State) ->
+  ?log("unhandled info message ~p", [_Info]),
+  {noreply, State}
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~

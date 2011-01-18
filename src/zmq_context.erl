@@ -136,8 +136,9 @@ handle_info({'EXIT', Port, Reason}, #state{port=Port} = State) ->
 handle_info({'EXIT', Owner, Reason}, #state{owner=Owner} = State) ->
   {stop, {owner_died, Reason}, State#state{owner = undefined}}
 ;
-handle_info(Info, State) ->
-  {stop, {unhandled_info, Info}, State}
+handle_info(_Info, State) ->
+  ?log("unhandled info message ~p", [_Info]),
+  {noreply, State}
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
