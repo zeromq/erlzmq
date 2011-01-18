@@ -109,12 +109,13 @@ handle_call(Request, From, State) ->
       {reply, Result, State}
     ;
     {Method, Args} when is_atom(Method), is_list(Args) ->
-      %TODO: ??? catch apply/3 in case bad Args content is provided and
-      %  zmq_drv.erl code crashes. For example, an invalid getsockopt option
-      %  being provided. Or should we validate Args content?
-      Result = apply(zmq_drv, Method, [State#state.port | Args]),
-      ?log("result for ~p: ~p", [From, Result]),
-      {reply, Result, State}
+      try apply(zmq_drv, Method, [State#state.port | Args]) of
+        Result ->
+          ?log("result for ~p: ~p", [From, Result]),
+          {reply, Result, State}
+      catch
+        error:undef -> {stop, {unhandled_call, Request, From}, State}
+      end
     ;
     _ ->
       {stop, {unhandled_call, Request, From}, State}

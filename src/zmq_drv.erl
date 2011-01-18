@@ -72,68 +72,93 @@ unload(_Port) ->
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 init(Port, IoThreads) ->
-  port_command(Port, encode_init(IoThreads)),
-  receive {?DRIVER_NAME, Result} -> Result end
+  try encode_init(IoThreads) of
+    Command -> send_command(Port, Command)
+  catch
+    error:_ -> {error, einval}
+  end
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 term(Port) ->
-  port_command(Port, encode_term()),
-  receive {?DRIVER_NAME, Result} -> Result end
+  send_command(Port, encode_term())
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 socket(Port, Type) ->
-  port_command(Port, encode_socket(Type)),
-  receive {?DRIVER_NAME, Result} -> Result end
+  try encode_socket(Type) of
+    Command -> send_command(Port, Command)
+  catch
+    error:_ -> {error, einval}
+  end
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 close(Port) ->
-  port_command(Port, encode_close()),
-  receive {?DRIVER_NAME, Result} -> Result end
+  send_command(Port, encode_close())
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 setsockopt(Port, Options) ->
-  port_command(Port, encode_setsockopt(Options)),
-  receive {?DRIVER_NAME, Result} -> Result end
+  try encode_setsockopt(Options) of
+    Command -> send_command(Port, Command)
+  catch
+    error:_ -> {error, einval}
+  end
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 getsockopt(Port, Option) ->
-  port_command(Port, encode_getsockopt(Option)),
-  receive {?DRIVER_NAME, Result} -> Result end
+  try encode_getsockopt(Option) of
+    Command -> send_command(Port, Command)
+  catch
+    error:_ -> {error, einval}
+  end
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 bind(Port, Endpoint) ->
-  port_command(Port, encode_bind(Endpoint)),
-  receive {?DRIVER_NAME, Result} -> Result end
+  try encode_bind(Endpoint) of
+    Command -> send_command(Port, Command)
+  catch
+    error:_ -> {error, einval}
+  end
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 connect(Port, Endpoint) ->
-  port_command(Port, encode_connect(Endpoint)),
-  receive {?DRIVER_NAME, Result} -> Result end
+  try encode_connect(Endpoint) of
+    Command -> send_command(Port, Command)
+  catch
+    error:_ -> {error, einval}
+  end
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 send(Port, Data, Flags) ->
-  port_command(Port, encode_send(Data, Flags)),
-  receive {?DRIVER_NAME, Result} -> Result end
+  try encode_send(Data, Flags) of
+    Command -> send_command(Port, Command)
+  catch
+    error:_ -> {error, einval}
+  end
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 recv(Port, Flags) ->
-  port_command(Port, encode_recv(Flags)),
-  receive {?DRIVER_NAME, Result} -> Result end
+  try encode_recv(Flags) of
+    Command -> send_command(Port, Command)
+  catch
+    error:_ -> {error, einval}
+  end
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 poll(Port, Events) ->
-  port_command(Port, encode_poll(Events)),
-  receive {?DRIVER_NAME, Result} -> Result end
+  try encode_poll(Events) of
+    Command -> send_command(Port, Command)
+  catch
+    error:_ -> {error, einval}
+  end
 .
 
 %%-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -274,3 +299,9 @@ make_sockopt({rcvbuf,        V}) when is_integer(V) -> <<?ZMQ_RCVBUF,       8, V
 make_sockopt({linger,        V}) when is_integer(V) -> <<?ZMQ_LINGER,       4, V:32/native>>;
 make_sockopt({reconnect_ivl, V}) when is_integer(V) -> <<?ZMQ_RECONNECT_IVL,4, V:32/native>>;
 make_sockopt({backlog,       V}) when is_integer(V) -> <<?ZMQ_BACKLOG,      4, V:32/native>>.
+
+%%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
+send_command(Port, Command) ->
+  port_command(Port, Command),
+  receive {?DRIVER_NAME, Result} -> Result end
+.
