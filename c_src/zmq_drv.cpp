@@ -845,6 +845,21 @@ wrap_zmq_poll(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 
     zmqdrv_fprintf("poll %p (events: %u)\r\n", si->socket, events);
 
+    if (0 == events)
+    {
+        si->poll_events = 0;
+        si->poll_caller = 0;
+
+        if (si->busy && 0 == si->in_caller && 0 == si->out_caller)
+        {
+            driver_select(drv->port, si->fd, ERL_DRV_READ, 0);
+            si->busy = false;
+        }
+
+        reply_ok(drv->port, caller);
+        return;
+    }
+
     if (si->busy)
     {
         reply_error(drv->port, caller, EBUSY);
