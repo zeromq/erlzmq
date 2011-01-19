@@ -162,42 +162,39 @@ poll(Socket, Events) when is_list(Events) ->
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% @doc Receive a message from the given 0MQ socket without blocking.
-%% @spec (zmq_socket(), Flag::noblock) -> {ok, Data} | {error, zmq_error()}
+%% @spec (zmq_socket(), Flags::[noblock]) -> {ok, Data} | {error, zmq_error()}
 %%          Data = binary() | [binary()]
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-recv(Socket, noblock) ->
-  gen_server:call(Socket, {recv, [[noblock]]}, ?SOCKET_TIMEOUT)
+recv(Socket, Flags) when is_list(Flags) ->
+  gen_server:call(Socket, {recv, [Flags]}, ?SOCKET_TIMEOUT)
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Receive a message from the given 0MQ socket.
-%% @spec (zmq_socket()) -> {ok, Data} | {error, zmq_error()}
-%%          Data = binary() | [binary()]
+%% @equiv recv(Socket, [])
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 recv(Socket) ->
-  gen_server:call(Socket, {recv, [[]]}, ?SOCKET_TIMEOUT)
+  recv(Socket, [])
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% @doc Send a message to the given 0MQ socket without blocking.
-%% @spec (zmq_socket(), Data, Flag::noblock) -> ok | {error, zmq_error()}
+%% @spec (zmq_socket(), Data, Flags::[noblock]) -> ok | {error, zmq_error()}
 %%          Data = binary() | [binary()]
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-send(Socket, Data, noblock) when is_binary(Data); is_list(Data), 0 < length(Data) ->
-  gen_server:call(Socket, {send, [Data, [noblock]]}, ?SOCKET_TIMEOUT)
+send(Socket, Data, Flags) when is_binary(Data), is_list(Flags);
+                               is_list(Data), 0 < length(Data), is_list(Flags) ->
+  gen_server:call(Socket, {send, [Data, Flags]}, ?SOCKET_TIMEOUT)
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Send a message to the given 0MQ socket.
-%% @spec (zmq_socket(), Data) -> ok | {error, zmq_error()}
-%%          Data = binary() | [binary()]
+%% @equiv send(Socket, Data, [])
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-send(Socket, Data) when is_binary(Data); is_list(Data), 0 < length(Data)  ->
-  gen_server:call(Socket, {send, [Data, []]}, ?SOCKET_TIMEOUT)
+send(Socket, Data) ->
+  send(Socket, Data, [])
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
