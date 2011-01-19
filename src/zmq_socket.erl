@@ -148,8 +148,8 @@ handle_cast(Msg, State) ->
 %%          {stop, Reason, NewState}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-handle_info({?DRIVER_NAME, Events}, #state{owner=Owner} = State) when is_list(Events) ->
-  Owner ! {zmq, self(), Events},
+handle_info({?DRIVER_NAME, poll, Events}, #state{owner=Owner} = State) when is_list(Events) ->
+  Owner ! {zmq, self(), {poll ,Events}},
   {noreply, State}
 ;
 handle_info({'EXIT', Owner, Reason}, #state{owner=Owner} = State) ->

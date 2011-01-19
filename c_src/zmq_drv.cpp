@@ -28,6 +28,7 @@ static ErlDrvTermData am_ok;
 static ErlDrvTermData am_error;
 static ErlDrvTermData am_true;
 static ErlDrvTermData am_false;
+static ErlDrvTermData am_poll;
 static ErlDrvTermData am_pollin;
 static ErlDrvTermData am_pollout;
 static ErlDrvTermData am_pollerr;
@@ -233,11 +234,12 @@ send_events(ErlDrvPort port, ErlDrvTermData pid, uint32_t events)
     {
         ErlDrvTermData spec[] = {
             ERL_DRV_ATOM,   am_zmq_drv,
+            ERL_DRV_ATOM,   am_poll,
             ERL_DRV_ATOM,   am_pollin,
             ERL_DRV_ATOM,   am_pollout,
             ERL_DRV_NIL,
             ERL_DRV_LIST,   3,
-            ERL_DRV_TUPLE,  2
+            ERL_DRV_TUPLE,  3
         };
         driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
     }
@@ -245,15 +247,16 @@ send_events(ErlDrvPort port, ErlDrvTermData pid, uint32_t events)
     {
         ErlDrvTermData spec[] = {
             ERL_DRV_ATOM,   am_zmq_drv,
+            ERL_DRV_ATOM,   am_poll,
             ERL_DRV_ATOM,   am_pollerr,
             ERL_DRV_NIL,
             ERL_DRV_LIST,   2,
-            ERL_DRV_TUPLE,  2
+            ERL_DRV_TUPLE,  3
         };
         switch (events)
         {
-            case ZMQ_POLLIN:  spec[3] = am_pollin;  break;
-            case ZMQ_POLLOUT: spec[3] = am_pollout; break;
+            case ZMQ_POLLIN:  spec[5] = am_pollin;  break;
+            case ZMQ_POLLOUT: spec[5] = am_pollout; break;
         }
         driver_send_term(port, pid, spec, sizeof(spec)/sizeof(spec[0]));
     }
@@ -898,6 +901,7 @@ zmqdrv_driver_init(void)
     INIT_ATOM(error);
     INIT_ATOM(true);
     INIT_ATOM(false);
+    INIT_ATOM(poll);
     INIT_ATOM(pollin);
     INIT_ATOM(pollout);
     INIT_ATOM(pollerr);
