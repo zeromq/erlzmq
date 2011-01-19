@@ -110,7 +110,7 @@ dies.
 
 {@link zmq:init/1} initializes a 0MQ `Context' by starting and linking a
 gen_server to the calling process. This server wraps and maintains the
-initialized 0MQ `Context'.  {@link zmq:init/1} returns the `Context' which is
+initialized 0MQ `Context'.  `zmq:init/1' returns the `Context' which is
 the {@type pid()} of the gen_server.  The `Context' is used in
 {@link zmq:socket/2} and {@link zmq:term/1}.  The `Context' may be used by any
 Erlang process when calling {@link zmq:socket/2}.
@@ -123,7 +123,7 @@ function is wrapping it for use in a supervision tree.
 
 {@link zmq:socket/2} creates a 0MQ Socket by starting and linking a gen_server
 to the calling process.  This server wraps and maintains the created 0MQ
-`Socket'.  {@link zmq:socket/2} returns the `Socket' which is the {@type pid()}
+`Socket'.  `zmq:socket/2' returns the `Socket' which is the {@type pid()}
 of the gen_server.  The `Socket' is used in the other {@link zmq} module socket
 functions.  A `Socket' may be used by any Erlang process when calling into the
 {@link zmq} module and not just the owner process.  However, application logic
@@ -132,11 +132,11 @@ must synchronize the use of the `Socket' accordingly.  eg. If you have a 0MQ
 application logic to ensure this.
 
 {@link zmq:socket/3} is like {@link zmq:socket/2} but it registers the
-gen_server using the given `Name'.  As such the returned {@type pid()} of the
-gen_server can be ignored.  The registered `Name' can be used as the 0MQ
+gen_server using the given `Regname'.  As such the returned {@type pid()} of the
+gen_server can be ignored.  The registered `Regname' can be used as the 0MQ
 `Socket' when calling other {@link zmq} module api. The typical use of this
 function is wrapping it for use in a supervision tree.  Note that this does
-<em>not</em> set the `Socket' identity.
+<em>not</em> set the `Socket' `identity'.
 
 {@link zmq:send/2} and {@link zmq:send/3} accept either a binary or a list of
 binaries.  If given a list of binaries, then each binary in the list will be
@@ -147,7 +147,7 @@ multi-part message.
 binaries.  If the `Socket' receives a multi-part message, the entire message
 will be returned as a list of binaries.  There is no need to explicitly check
 for 0MQ `rcvmore' socket option using {@link zmq:getsockopt/2} and repeatedly
-calling {@link zmq:recv/1} as would be necessary using the native 0MQ C language
+calling `zmq:recv/1' as would be necessary using the native 0MQ C language
 bindings.
 
 {@link zmq:poll/2} is non blocking and upon successfully setting up the requested
@@ -155,12 +155,12 @@ polling for the `Socket', will return `ok'.  When an event on the `Socket'
 occurs, a message will be put in the `Socket' owner's mailbox containing the
 returned events having the format of
 {@type {zmq, Socket::pid(), REvents::[zmq:zmq_event()]@}}.  Once the event
-message is received, {@link zmq:poll/2} must be called again to receive further
+message is received, `zmq:poll/2' must be called again to receive further
 events.
 
 {@link zmq:term/1} is non blocking and fails with {@link zmq:zmq_error()} of
 `eagain' if any open `Sockets' exist for the given `Context'.  Ensure all
-sockets are closed before calling {@link zmq:term/1}.  If the `Context' owner
+sockets are closed before calling `zmq:term/1'.  If the `Context' owner
 process dies, all `Sockets' in the `Context' will be forcefully closed and the
 `Context' terminated.
 

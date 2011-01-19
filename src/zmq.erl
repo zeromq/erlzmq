@@ -140,19 +140,19 @@ init(IoThreads) when is_integer(IoThreads) ->
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Initialize 0MQ context. `Name' can be used as the `Context' in
-%%      {@link {@module}:socket/2} and {@link {@module}:term/1}.  Typical use of
-%%      this call is wrapping for placement in a supervision tree.
+%% @doc Initialize a registered 0MQ context. `Regname' can be used as the
+%%      `Context' in {@link {@module}:socket/2} and {@link {@module}:term/1}.
+%%      Typical use is wrapping for placement in a supervision tree.
 %% @spec (atom(), integer()) -> {ok, Context::pid()} | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-init(Name, IoThreads) when is_atom(Name), is_integer(IoThreads) ->
-  gen_server:start_link({local, Name}, zmq_context, [{owner, self()}, {iothreads, IoThreads}], [])
+init(IoThreads, Regname) when is_integer(IoThreads), is_atom(Regname) ->
+  gen_server:start_link({local, Regname}, zmq_context, [{owner, self()}, {iothreads, IoThreads}], [])
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% @doc Poll for 0MQ socket events.  Events are received in the caller's mailbox
-%%      as {@type {zmq, Socket::pid(), REvents::[zmq_event()]@}}.
+%%      as {@type @{zmq, Socket::pid(), REvents::[zmq_event()]@}}.
 %% @spec (zmq_socket(), [zmq_event()]) -> ok | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
@@ -222,7 +222,8 @@ setsockopt(Socket, Options) when is_list(Options) ->
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 %% @doc Create a 0MQ socket.
-%% @spec (zmq_context(), zmq_socket_type()) -> {ok, Socket::pid()} | {error, zmq_error()}
+%% @spec (zmq_context(), zmq_socket_type()) ->
+%%         {ok, Socket::pid()} | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 socket(Context, Type) when is_pid(Context) orelse is_atom(Context), is_atom(Type) ->
@@ -230,14 +231,15 @@ socket(Context, Type) when is_pid(Context) orelse is_atom(Context), is_atom(Type
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-%% @doc Create a 0MQ socket. `Name' can be used as the `Socket' in other
-%%      `{@module}' module calls.  Typical use of this call is wrapping for
+%% @doc Create a registered 0MQ socket.  `Regname' can be used as the `Socket'
+%%      in other `{@module}' module calls.  Typical use is wrapping for
 %%      placement in a supervision tree.
-%% @spec (zmq_context(), atom(), zmq_socket_type()) -> {ok, Socket::pid()} | {error, zmq_error()}
+%% @spec (zmq_context(), zmq_socket_type(), atom()) ->
+%%         {ok, Socket::pid()} | {error, zmq_error()}
 %% @end
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-socket(Context, Name, Type) when is_pid(Context) orelse is_atom(Context), is_atom(Name), is_atom(Type) ->
-  gen_server:start_link({local, Name}, zmq_socket, [{owner, self()}, {context, Context}, {type, Type}], [])
+socket(Context, Type, Regname) when is_pid(Context) orelse is_atom(Context), is_atom(Type), is_atom(Regname) ->
+  gen_server:start_link({local, Regname}, zmq_socket, [{owner, self()}, {context, Context}, {type, Type}], [])
 .
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
