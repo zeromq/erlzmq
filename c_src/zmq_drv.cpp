@@ -387,6 +387,14 @@ wrap_zmq_socket(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
 
     assert(NULL == drv->get_socket_info(caller));
 
+    // Runtime validation as well in case zmq_drv.erl is used directly rather
+    // than through zmq_socket.erl gen_server.
+    if (NULL != drv->get_socket_info(caller))
+    {
+        reply_error(drv->port, caller, EBUSY);
+        return;
+    }
+
     void* s = zmq_socket(drv->zmq_context, type);
 
     if (!s)
