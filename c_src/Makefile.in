@@ -29,5 +29,5 @@ distclean: clean
 
 install:
 	$(MKDIR_P) $(DIST_DIR) $(dir $(DIST_DIR))c_src
-	$(INSTALL) zmq_drv.h zmq_drv.cpp $(dir $(DIST_DIR))c_src/
-	$(INSTALL) $(LIBZMQ_SO) $(DIST_DIR)/
+	$(INSTALL) -m 644 zmq_drv.h zmq_drv.cpp $(dir $(DIST_DIR))c_src/
+	$(INSTALL) -m 644 $(LIBZMQ_SO) $(DIST_DIR)/

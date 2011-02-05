@@ -89,7 +89,7 @@ dnl ------------------------------------------------------------------
 dnl Debugging option.
 AC_ARG_ENABLE([debug],
     AC_HELP_STRING([--enable-debug],
-        [turn on debugging [[default=yes]]]),,
+        [turn on debugging [[default=no]]]),,
     enable_debug=no)
 if test "x${enable_debug}" = "xyes"; then
     AC_DEFINE([DEBUG], [], [Enable debug])
@@ -116,11 +116,13 @@ dnl ------------------------------------------------------------------
 dnl Documentation.
 dnl ------------------------------------------------------------------
 
-AC_ARG_ENABLE([documentation],
+AC_ARG_ENABLE([docs],
     AC_HELP_STRING([--enable-docs],
         [build documentation [[default=yes]]]),,
     enable_docs="yes")
-AM_CONDITIONAL(ENABLE_DOCUMENTATION, test "x${enable_docs}" = "xyes")
+if test "x${enable_docs}" = "xyes"; then
+    AC_SUBST([ENABLE_DOCS], [1])
+fi
 
 dnl ------------------------------------------------------------------
 dnl Examples.
@@ -128,9 +130,11 @@ dnl ------------------------------------------------------------------
 
 AC_ARG_ENABLE([examples],
     AC_HELP_STRING([--enable-examples],
-        [build examples [[default=yes]]]),,
-    enable_examples="yes")
-AM_CONDITIONAL(ENABLE_EXAMPLES, test "x${enable_examples}" = "xyes")
+        [build examples [[default=no]]]),,
+    enable_examples="no")
+if test "x${enable_examples}" = "xyes"; then
+    AC_SUBST([ENABLE_EXAMPLES], [1])
+fi
 
 dnl ------------------------------------------------------------------
 dnl ZeroMQ

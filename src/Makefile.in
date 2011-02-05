@@ -11,8 +11,11 @@ EBIN_DIR=../ebin
 DOC_DIR=../doc
 ERL_OBJECTS=$(ERL_SOURCES:%.erl=$(EBIN_DIR)/%.beam)
 DOC_FILES=$(addprefix $(DOC_DIR)/,zmq.html)
+enable_docs=@ENABLE_DOCS@
+DOCS=$(if $(enable_docs),docs)
+INSTALL_DOCS=$(if $(enable_docs),install_docs)
 
-all: $(ERL_OBJECTS)
+all: $(ERL_OBJECTS) $(DOCS)
 
 $(EBIN_DIR)/%.beam: %.erl
 	erlc $(ERL_FLAGS) -o ../ebin $<
@@ -32,10 +35,12 @@ $(DOC_DIR)/zmq.html: zmq.erl overview.edoc
 	erl -noshell -run edoc_run application "'zmq'" '"."' \
 		'[{dir, "$(DOC_DIR)"}, {def, [{version, "$(VSN)"}]}]' -run init stop
 
-install:
-	@[ -d $(DOC_DIR) ] || (echo "Error: run 'make docs' first!" && exit 1)
-	$(MKDIR_P) $(DIST_DIR)/src $(DIST_DIR)/ebin $(DIST_DIR)/doc
-	$(INSTALL) ../src/*.erl $(DIST_DIR)/src/
-	$(INSTALL) ../ebin/*.beam ../ebin/*.app $(DIST_DIR)/ebin/
-	$(INSTALL) ../doc/*.css ../doc/*.html ../doc/*.png $(DIST_DIR)/doc
-	$(INSTALL) ../README ../LICENSE $(DIST_DIR)
+install: $(INSTALL_DOCS)
+	$(MKDIR_P) $(DIST_DIR)/src $(DIST_DIR)/ebin
+	$(INSTALL) -m 644 ../src/*.erl $(DIST_DIR)/src/
+	$(INSTALL) -m 644 ../ebin/*.beam ../ebin/*.app $(DIST_DIR)/ebin/
+	$(INSTALL) -m 644 ../README ../LICENSE $(DIST_DIR)
+
+install_docs:
+	$(MKDIR_P) $(DIST_DIR)/doc
+	$(INSTALL) -m 644 ../doc/*.css ../doc/*.html ../doc/*.png $(DIST_DIR)/doc
