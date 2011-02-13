@@ -137,6 +137,16 @@ if test "x${enable_examples}" = "xyes"; then
 fi
 
 dnl ------------------------------------------------------------------
+dnl Static
+dnl ------------------------------------------------------------------
+
+AC_ARG_ENABLE([static],
+    AC_HELP_STRING([--enable-static],
+        [link with zeromq static library [[default=no]]]),,
+    enable_static="no")
+AM_CONDITIONAL(ENABLE_STATIC, test "x${enable_static}" = "xyes")
+
+dnl ------------------------------------------------------------------
 dnl ZeroMQ
 dnl ------------------------------------------------------------------
 
@@ -152,11 +162,16 @@ Use the '--with-zeromq=PATH' option to specify location of ZeroMQ])])
 
 CXXFLAGS="${CXXFLAGS# } -I${with_zeromq}/include"
 
-case "${host_os}" in
-    *darwin*)
-        LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq";;
+case "${enable_static}" in
+    *yes*)
+        LDFLAGS="${LDFLAGS# } ${with_zeromq}/lib/libzmq.a";;
     *)
-        LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq -Wl,-R${with_zeromq}/lib";;
+    case "${host_os}" in
+        *darwin*)
+            LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq";;
+        *)
+            LDFLAGS="${LDFLAGS# } -L${with_zeromq}/lib -lzmq -Wl,-R${with_zeromq}/lib";;
+    esac;;
 esac
 
 dnl ------------------------------------------------------------------
@@ -213,4 +228,8 @@ echo
 AC_MSG_NOTICE([    Debug/warnings:     ${enable_debug}/${enable_warnings}])
 AC_MSG_NOTICE([    Documentation:      ${enable_docs}])
 AC_MSG_NOTICE([    Examples:           ${enable_examples}])
+
+echo
+AC_MSG_NOTICE([    Static:              ${enable_static}])
+
 echo
