@@ -1,0 +1,27 @@
+#! /usr/bin/env escript
+%%! -K true -smp enable -pa ../ebin
+
+main([BindTo, MessageSizeStr, MessageCountStr]) ->
+  {MessageSize, _} = string:to_integer(MessageSizeStr),
+  {MessageCount, _} = string:to_integer(MessageCountStr),
+  {ok, Context} = zmq:init(1),
+  {ok, Socket} = zmq:socket(Context, sub),
+  ok = zmq:setsockopt(Socket, [{subscribe, ""}]),
+  ok = zmq:bind(Socket, BindTo),
+  {Elapsed, _} = timer:tc(erlang, apply, [
+    fun() -> [zmq:recv(Socket) || _I <- lists:seq(1, MessageCount)] end, []
+  ]),
+  Throughput = MessageCount / Elapsed * 1000000,
+  Megabits = Throughput * MessageSize * 8,
+  io:format(
+    "message size: ~p [B]~n"
+    "message count: ~p~n"
+    "mean throughput: ~p [msg/s]~n"
+    "mean throughput: ~p [Mb/s]~n",
+    [MessageSize, MessageCount, Throughput, Megabits]
+  ),
+  zmq:term(Context)
+;
+main(_) ->
+  io:format("Usage: local_thr \"<zmq endpoint>\" <size> <count>~n")
+.
