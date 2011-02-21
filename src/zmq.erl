@@ -596,4 +596,13 @@ setsockopts_test() ->
     ?assertMatch({ok, false}, zmq:getsockopt(S, active)),
     ok.
 
+pushpull_test() ->
+    zmq:start(), 
+    {ok, Push} = zmq:socket(push, [{active, false}]),
+    {ok, Pull} = zmq:socket(pull, [{active, false}]),
+    ?assertMatch(ok, zmq:bind(Pull,"tcp://127.0.0.1:2000")),
+    ?assertMatch(ok, zmq:connect(Push, "tcp://127.0.0.1:2000")),
+    ?assertMatch(ok, zmq:send(Push, <<"Hello World!">>)),
+    ?assertMatch({ok, <<"Hello World!">>}, zmq:recv(Pull)).
+
 -endif.

@@ -12,8 +12,8 @@
 -define('ZMQ_REP',          4).
 -define('ZMQ_XREQ',         5).
 -define('ZMQ_XREP',         6).
--define('ZMQ_PUSH',         7).
--define('ZMQ_PULL',         8).
+-define('ZMQ_PULL',         7).
+-define('ZMQ_PUSH',         8).
 -define('ZMQ_UPSTREAM',     7).
 -define('ZMQ_DOWNSTREAM',   8).
 
