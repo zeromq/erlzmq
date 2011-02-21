@@ -255,7 +255,7 @@ zmqdrv_error_code(zmq_drv_t *drv, int err)
 static void
 zmqdrv_ok(zmq_drv_t *drv, ErlDrvTermData pid)
 {
-  ErlDrvTermData spec[] = {ERL_DRV_ATOM, am_zok};
+    ErlDrvTermData spec[] = {ERL_DRV_ATOM, am_zok};
     driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
 }
 
@@ -266,7 +266,29 @@ zmqdrv_ok(zmq_drv_t *drv)
 }
 
 static void
-zmqdrv_binary_ok(zmq_drv_t *drv, ErlDrvTermData pid, void *data, size_t size)
+zmqdrv_ok_bool(zmq_drv_t *drv, ErlDrvTermData pid, bool val)
+{
+    ErlDrvTermData spec[] = {
+        ERL_DRV_ATOM,  am_zok,
+        ERL_DRV_ATOM, (val ? am_true : am_false),
+        ERL_DRV_TUPLE, 2
+    };
+    driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+}
+
+static void
+zmqdrv_ok_int64(zmq_drv_t *drv, ErlDrvTermData pid, int64_t val)
+{
+    ErlDrvTermData spec[] = {
+        ERL_DRV_ATOM,   am_zok,
+        ERL_DRV_INT64,  TERM_DATA(&val),
+        ERL_DRV_TUPLE,  2
+    };
+    driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
+}
+
+static void
+zmqdrv_ok_binary(zmq_drv_t *drv, ErlDrvTermData pid, void *data, size_t size)
 {
     /* Copy payload. */
     ErlDrvTermData spec[] =
@@ -275,11 +297,6 @@ zmqdrv_binary_ok(zmq_drv_t *drv, ErlDrvTermData pid, void *data, size_t size)
        ERL_DRV_TUPLE, 2};
 
     driver_send_term(drv->port, pid, spec, sizeof(spec)/sizeof(spec[0]));
-}
-
-static void
-zmqdrv_binary_ok(zmq_drv_t *drv, void *data, size_t size) {
-    zmqdrv_binary_ok(drv, driver_caller(drv->port), data, size);
 }
 
 //-------------------------------------------------------------------
@@ -666,29 +683,138 @@ zmqdrv_setsockopt(zmq_drv_t *drv, ErlIOVec *ev)
 static void 
 zmqdrv_getsockopt(zmq_drv_t *drv, ErlIOVec *ev)
 {
-    ErlDrvBinary*  bin   = ev->binv[1];
-    char*          bytes = bin->orig_bytes;
-    uint32_t       idx   = ntohl(*(uint32_t*)(bytes+1));
-    void*          s     = drv->get_zmq_socket(idx);
-    uint32_t       opt   = ntohl (*(uint32_t*)(bytes+sizeof(idx)+1));
+    ErlDrvBinary*   bin   = ev->binv[1];
+    char*           bytes = bin->orig_bytes;
+    uint32_t        idx   = ntohl(*(uint32_t*)(bytes+1));
+    void*           s     = drv->get_zmq_socket(idx);
+    zmq_sock_info*  si    = drv->get_socket_info(idx);
+    uint32_t        opt   = ntohl (*(uint32_t*)(bytes+sizeof(idx)+1));
+    union {
+        uint8_t  a[255];
+        uint64_t ui64;
+        int64_t  i64;
+        int      i;
+        uint32_t ui;
+    } val;
+    size_t vallen;
 
-    if (opt == ZMQ_RCVMORE) {
-        int64_t val;
-        size_t valsz = sizeof (val);
-        if (zmq_getsockopt (s, opt, &val, &valsz) < 0) {
-            zmqdrv_error_code(drv, zmq_errno());
-            return;
-        }
-
-        ErlDrvTermData spec[] = {
-            ERL_DRV_ATOM,  am_zok,
-            ERL_DRV_ATOM, (val ? am_true : am_false),
-            ERL_DRV_TUPLE, 2};
-        driver_send_term(drv->port, driver_caller(drv->port), spec, sizeof(spec)/sizeof(spec[0]));
+    if (idx > drv->zmq_socket_count || !s || !si) {
+        zmqdrv_error_code(drv, ENODEV);
         return;
     }
 
-    zmqdrv_error(drv, "Not implemented");
+    zmqdrv_fprintf("setsockopt %p (setting %d options)\r\n", si->socket, (int)n);
+
+    switch (opt) {
+        case ZMQ_AFFINITY:
+            vallen = sizeof(uint64_t);
+            if (zmq_getsockopt(s, opt, &val.ui64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.ui64);
+            break;
+        case ZMQ_BACKLOG:
+            vallen = sizeof(int);
+            if (zmq_getsockopt(s, opt, &val.i, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.i);
+            break;
+        case ZMQ_EVENTS:
+            vallen = sizeof(uint32_t);
+            if (zmq_getsockopt(s, opt, &val.ui, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.ui);
+            break;
+        case ZMQ_FD:
+            vallen = sizeof(int);
+            if (zmq_getsockopt(s, opt, &val.i, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.i);
+            break;
+        case ZMQ_HWM:
+            vallen = sizeof(uint64_t);
+            if (zmq_getsockopt(s, opt, &val.ui64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.ui64);
+            break;
+        case ZMQ_IDENTITY:
+            vallen = sizeof(val);
+            if (zmq_getsockopt(s, opt, val.a, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_binary(drv, driver_caller(drv->port), val.a, vallen);
+            break;
+        case ZMQ_LINGER:
+            vallen = sizeof(int);
+            if (zmq_getsockopt(s, opt, &val.i, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_bool(drv, driver_caller(drv->port), !!val.i);
+            break;
+        case ZMQ_MCAST_LOOP:
+            vallen = sizeof(int64_t);
+            if (zmq_getsockopt(s, opt, &val.i64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_bool(drv, driver_caller(drv->port), !!val.i64);
+            break;
+        case ZMQ_RATE:
+            vallen = sizeof(int64_t);
+            if (zmq_getsockopt(s, opt, &val.i64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.i64);
+            break;
+        case ZMQ_RCVBUF:
+            vallen = sizeof(uint64_t);
+            if (zmq_getsockopt(s, opt, &val.ui64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.ui64);
+            break;
+        case ZMQ_RCVMORE:
+            vallen = sizeof(int64_t);
+            if (zmq_getsockopt(s, opt, &val.i64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_bool(drv, driver_caller(drv->port), !!val.i64);
+            break;
+        case ZMQ_RECONNECT_IVL:
+            vallen = sizeof(int);
+            if (zmq_getsockopt(s, opt, &val.i, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.i);
+            break;
+        case ZMQ_RECOVERY_IVL:
+            vallen = sizeof(int64_t);
+            if (zmq_getsockopt(s, opt, &val.i64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.i64);
+            break;
+        case ZMQ_RECOVERY_IVL_MSEC:
+            vallen = sizeof(int64_t);
+            if (zmq_getsockopt(s, opt, &val.i64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.i64);
+            break;
+        case ZMQ_SNDBUF:
+            vallen = sizeof(uint64_t);
+            if (zmq_getsockopt(s, opt, &val.ui64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.ui64);
+            break;
+        case ZMQ_SWAP:
+            vallen = sizeof(int64_t);
+            if (zmq_getsockopt(s, opt, &val.i64, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.i64);
+            break;
+        case ZMQ_TYPE:
+            vallen = sizeof(int);
+            if (zmq_getsockopt(s, opt, &val.i, &vallen) < 0)
+                zmqdrv_error_code(drv, zmq_errno());
+            zmqdrv_ok_int64(drv, driver_caller(drv->port), val.i);
+            break;
+        case ZMQ_ACTIVE:
+            zmqdrv_ok_bool(drv, driver_caller(drv->port), si->active_mode);
+            break;
+        default:
+            zmqdrv_error(drv, "Option not implemented!");
+            return;
+    }
 }
 
 static void
@@ -853,7 +979,7 @@ zmqdrv_recv(zmq_drv_t *drv, ErlIOVec *ev)
         msg_t msg;
 
         if (zmq_recv(si->socket, &msg, ZMQ_NOBLOCK) == 0)
-            zmqdrv_binary_ok(drv, zmq_msg_data(&msg), zmq_msg_size(&msg));
+            zmqdrv_ok_binary(drv, driver_caller(drv->port), zmq_msg_data(&msg), zmq_msg_size(&msg));
         else if (zmq_errno() == EAGAIN) {
             // No input available. Make the caller wait by not returning result
             si->in_caller = driver_caller(drv->port);

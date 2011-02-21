@@ -148,7 +148,9 @@ static void zmqdrv_socket_error(zmq_drv_t *drv, ErlDrvTermData pid, uint32_t idx
 static void zmqdrv_error(zmq_drv_t *zmq_drv, const char *errstr);
 static void zmqdrv_error_code(zmq_drv_t *zmq_drv, int err);
 static void zmqdrv_ok(zmq_drv_t *zmq_drv);
-static void zmqdrv_binary_ok(zmq_drv_t *zmq_drv, void *data, size_t size);
+static void zmqdrv_ok_bool(zmq_drv_t *zmq_drv, ErlDrvTermData pid, bool val);
+static void zmqdrv_ok_int64(zmq_drv_t *zmq_drv, ErlDrvTermData pid, int64_t val);
+static void zmqdrv_ok_binary(zmq_drv_t *zmq_drv, ErlDrvTermData pid, void *data, size_t size);
 static void zmqdrv_init(zmq_drv_t *zmq_drv, ErlIOVec *ev);
 static void zmqdrv_term(zmq_drv_t *zmq_drv, ErlIOVec *ev);
 static void zmqdrv_socket(zmq_drv_t *zmq_drv, ErlIOVec *ev);
