@@ -191,12 +191,14 @@ encode_getsockopt(Option) ->
     identity      -> ?ZMQ_IDENTITY;
     rate          -> ?ZMQ_RATE;
     recovery_ivl  -> ?ZMQ_RECOVERY_IVL;
+    recovery_ivl_msec -> ?ZMQ_RECOVERY_IVL_MSEC;
     mcast_loop    -> ?ZMQ_MCAST_LOOP;
     sndbuf        -> ?ZMQ_SNDBUF;
     rcvbuf        -> ?ZMQ_RCVBUF;
     rcvmore       -> ?ZMQ_RCVMORE;
     linger        -> ?ZMQ_LINGER;
     reconnect_ivl -> ?ZMQ_RECONNECT_IVL;
+    reconnect_ivl_max -> ?ZMQ_RECONNECT_IVL_MAX;
     backlog       -> ?ZMQ_BACKLOG;
     fd            -> ?ZMQ_FD;
     events        -> ?ZMQ_EVENTS;
@@ -292,12 +294,14 @@ make_sockopt({unsubscribe,   V}) when is_binary(V),
 make_sockopt({unsubscribe,   V}) when is_list(V) -> make_sockopt({unsubscribe, list_to_binary(V)});
 make_sockopt({rate,          V}) when is_integer(V) -> <<?ZMQ_RATE,         8, V:64/native>>;
 make_sockopt({recovery_ivl,  V}) when is_integer(V) -> <<?ZMQ_RECOVERY_IVL, 8, V:64/native>>;
+make_sockopt({recovery_ivl_msec, V}) when is_integer(V) -> <<?ZMQ_RECOVERY_IVL_MSEC, 8, V:64/native>>;
 make_sockopt({mcast_loop,false})                    -> <<?ZMQ_MCAST_LOOP,   8, 0:64/native>>;
 make_sockopt({mcast_loop, true})                    -> <<?ZMQ_MCAST_LOOP,   8, 1:64/native>>;
 make_sockopt({sndbuf,        V}) when is_integer(V) -> <<?ZMQ_SNDBUF,       8, V:64/native>>;
 make_sockopt({rcvbuf,        V}) when is_integer(V) -> <<?ZMQ_RCVBUF,       8, V:64/native>>;
 make_sockopt({linger,        V}) when is_integer(V) -> <<?ZMQ_LINGER,       4, V:32/native>>;
 make_sockopt({reconnect_ivl, V}) when is_integer(V) -> <<?ZMQ_RECONNECT_IVL,4, V:32/native>>;
+make_sockopt({reconnect_ivl_max, V}) when is_integer(V) -> <<?ZMQ_RECONNECT_IVL_MAX,4, V:32/native>>;
 make_sockopt({backlog,       V}) when is_integer(V) -> <<?ZMQ_BACKLOG,      4, V:32/native>>.
 
 %%-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~

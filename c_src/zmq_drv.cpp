@@ -502,11 +502,13 @@ wrap_zmq_setsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
             case ZMQ_UNSUBSCRIBE:   break; // While the erlang layer limits this to 255, there is no zmq limit
             case ZMQ_RATE:          assert(optvallen == sizeof(int64_t)); break;
             case ZMQ_RECOVERY_IVL:  assert(optvallen == sizeof(int64_t)); break;
+            case ZMQ_RECOVERY_IVL_MSEC: assert(optvallen == sizeof(int64_t)); break;
             case ZMQ_MCAST_LOOP:    assert(optvallen == sizeof(int64_t)); break;
             case ZMQ_SNDBUF:        assert(optvallen == sizeof(uint64_t));break;
             case ZMQ_RCVBUF:        assert(optvallen == sizeof(uint64_t));break;
             case ZMQ_LINGER:        assert(optvallen == sizeof(int));     break; // Erlang layer assumes 32bit
             case ZMQ_RECONNECT_IVL: assert(optvallen == sizeof(int));     break; // Erlang layer assumes 32bit
+            case ZMQ_RECONNECT_IVL_MAX: assert(optvallen == sizeof(int)); break; // Erlang layer assumes 32bit
             case ZMQ_BACKLOG:       assert(optvallen == sizeof(int));     break; // Erlang layer assumes 32bit
             default:                assert(true);
         }
@@ -565,12 +567,14 @@ wrap_zmq_getsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
         case ZMQ_IDENTITY:      optvallen = sizeof(optval);   break;
         case ZMQ_RATE:          optvallen = sizeof(int64_t);  break;
         case ZMQ_RECOVERY_IVL:  optvallen = sizeof(int64_t);  break;
+        case ZMQ_RECOVERY_IVL_MSEC: optvallen = sizeof(int64_t); break;
         case ZMQ_MCAST_LOOP:    optvallen = sizeof(int64_t);  break;
         case ZMQ_SNDBUF:        optvallen = sizeof(uint64_t); break;
         case ZMQ_RCVBUF:        optvallen = sizeof(uint64_t); break;
         case ZMQ_RCVMORE:       optvallen = sizeof(int64_t);  break;
         case ZMQ_LINGER:        optvallen = sizeof(int);      break;
         case ZMQ_RECONNECT_IVL: optvallen = sizeof(int);      break;
+        case ZMQ_RECONNECT_IVL_MAX: optvallen = sizeof(int);  break;
         case ZMQ_BACKLOG:       optvallen = sizeof(int);      break;
         case ZMQ_FD:            optvallen = sizeof(int);      break;
         case ZMQ_EVENTS:        optvallen = sizeof(uint32_t); break;
@@ -598,6 +602,7 @@ wrap_zmq_getsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
         case ZMQ_SWAP:
         case ZMQ_RATE:
         case ZMQ_RECOVERY_IVL:
+        case ZMQ_RECOVERY_IVL_MSEC:
             reply_ok_int64(drv->port, caller, *(int64_t*)p);
             break;
 
@@ -615,6 +620,7 @@ wrap_zmq_getsockopt(zmq_drv_t *drv, const uint8_t* bytes, size_t size)
         // int
         case ZMQ_LINGER:
         case ZMQ_RECONNECT_IVL:
+        case ZMQ_RECONNECT_IVL_MAX:
         case ZMQ_BACKLOG:
         case ZMQ_FD:
         case ZMQ_TYPE:
