@@ -1,0 +1,27 @@
+----- Microsoft Visual Studio 2008 erlzmq build solution for c_src -----
+
+Requisites:
+	Erlang
+	ZeroMQ static lib
+		if you want to use the .dll remove the ZMQ_STATIC define from Configuration Properties -> C/C++ -> Preprocessor
+	
+Configuration Manager:
+	Configuration Properties
+		C/C++
+      General
+        Additional Include Directories
+          Change path to Erlang
+			%erlang_dir%\lib\erl_interface-%erl_interface_version%\include
+			%erlang_dir%\usr\include
+          Change path to ZeroMQ include dir
+    Linker
+      General
+        Additional Library Directories
+          Change path to ZeroMQ lib, static or implicit
+
+
+Debug:
+	Achieved through defines
+		ZMQDRV_DEBUG					enables debug to stderr
+			ZMQDRV_DEBUG_TO_FILE		debugs to file in current dir, filename zmq_drv.%process_identifier&.log, 
+										ZMQDRV_DEBUG must be defined

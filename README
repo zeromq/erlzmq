@@ -9,6 +9,7 @@ Building
     $ ./bootstrap
     $ ./configure --with-zeromq=/path/to/zeromq
     $ make
+    $ [Windows] open msvc/msvc.sln and build it
     $ make docs
 
 Documentation

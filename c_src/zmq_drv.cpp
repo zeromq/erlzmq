@@ -10,19 +10,39 @@
  * See ../LICENSE for license details
  */
 
+// uncomment the next line to enable debug
+//#define ZMQDRV_DEBUG
+// uncomment the next line to output debug info to a file of the format zmq_drv.<pid>.log
+// useful for testing the zmq primitives in the erl standalone shell
+//#define ZMQDRV_DEBUG_TO_FILE
+
 #include <stdio.h>
 #include <string.h>
 #include <zmq.h>
 #include <ctype.h>
 #include <sstream>
 #include <assert.h>
+// in windows process.h is needed for the getpid method to append to the log file
+#if defined(__WIN32__) && defined(ZMQDRV_DEBUG) && defined(ZMQDRV_DEBUG_TO_FILE)
+#	include <process.h>
+#endif
 #include "zmq_drv.h"
 
 #ifdef ZMQDRV_DEBUG
-#define zmqdrv_fprintf(...)   fprintf(stderr, __VA_ARGS__)
+#	ifdef ZMQDRV_DEBUG_TO_FILE
+#		ifdef __WIN32__
+// in windows getpid is deemed unsafe, must use _getpid instead
+#			define getpid _getpid
+#	endif
+		static FILE *debug_file;
+#		define zmqdrv_fprintf(...)   fprintf(debug_file, __VA_ARGS__);fflush(debug_file);
+#	else
+#		define zmqdrv_fprintf(...)   fprintf(stderr, __VA_ARGS__)
+#	endif
 #else
-#define zmqdrv_fprintf(...)
+#	define zmqdrv_fprintf(...)
 #endif
+
 #define INIT_ATOM(NAME) am_ ## NAME = (ErlDrvTermData)driver_mk_atom((char*)#NAME)
 
 /* Callbacks */
@@ -45,7 +65,7 @@ static ErlDrvEntry zmq_driver_entry = {
     NULL,                               /* event */
     ERL_DRV_EXTENDED_MARKER,            /* ERL_DRV_EXTENDED_MARKER */
     ERL_DRV_EXTENDED_MAJOR_VERSION,     /* ERL_DRV_EXTENDED_MAJOR_VERSION */
-    ERL_DRV_EXTENDED_MAJOR_VERSION,     /* ERL_DRV_EXTENDED_MINOR_VERSION */
+    ERL_DRV_EXTENDED_MINOR_VERSION,     /* ERL_DRV_EXTENDED_MINOR_VERSION */
     ERL_DRV_FLAG_USE_PORT_LOCKING,      /* ERL_DRV_FLAGs */
     NULL,                               /* handle2 (reserved */
     zmqdrv_process_exit,                /* process_exit */
@@ -53,22 +73,38 @@ static ErlDrvEntry zmq_driver_entry = {
 };
 
 /* Driver internal, C hook to driver API. */
-extern "C" DRIVER_INIT(zmq_drv)
+extern "C"
 {
-    return &zmq_driver_entry;
+	DRIVER_INIT(zmq_drv)
+	{
+		return &zmq_driver_entry;
+	}
 }
 
 zmq_drv_t::~zmq_drv_t()
 {
+    zmqdrv_fprintf("[zmq_drv] destroying zmq_drv_t object\r\n");
+
     for (zmq_pid_sockets_map_t::iterator it = zmq_pid_sockets.begin();
             it != zmq_pid_sockets.end(); ++it)
         driver_demonitor_process(port, &it->second.monitor);
 
-    for (zmq_fd_sockets_map_t::iterator it = zmq_fd_sockets.begin();
-            it != zmq_fd_sockets.end(); ++it)
+#ifdef __WIN32__
+	// on win32 we unregister wsa events, not socket descriptors
+    for (zmq_wsa_events_map_t::iterator it = zmq_wsa_events.begin();
+            it != zmq_wsa_events.end(); ++it) {
         driver_select(port, (ErlDrvEvent)it->first, ERL_DRV_READ, 0);
+        zmqdrv_fprintf("[zmq_drv] unregistered wsa event %d with Erlang VM\r\n", it->first);
+	}
+#else
+    for (zmq_fd_sockets_map_t::iterator it = zmq_fd_sockets.begin();
+            it != zmq_fd_sockets.end(); ++it) {
+        driver_select(port, (ErlDrvEvent)it->first, ERL_DRV_READ, 0);
+        zmqdrv_fprintf("[zmq_drv] unregistered socket descriptor %d with Erlang VM\r\n", it->first);
+	}
+#endif
 
-    for (zmq_sock_info *it=zmq_sock_infos, *next=(it ? it->next : NULL); it; it = next) {
+    for (zmq_sock_info *it = zmq_sock_infos, *next = (it ? it->next : NULL); it; it = next) {
         next = it->next;
         delete (&*it);
     }
@@ -78,9 +114,9 @@ zmq_drv_t::~zmq_drv_t()
     zmq_fd_sockets.clear();
 
     if (zmq_context) {
-        zmqdrv_fprintf("calling zmq_term(context) ...\r\n");
+        zmqdrv_fprintf("[zmq_drv] calling zmq_term(context)\r\n");
         zmq_term(zmq_context);
-        zmqdrv_fprintf("terminated zmq context\r\n");
+        zmqdrv_fprintf("[zmq_drv] terminated zmq context\r\n");
     }
 }
 
@@ -116,27 +152,29 @@ void zmq_drv_t::add_socket(zmq_sock_info* s)
             zmq_sock_set_t set;
             set.insert(s);
             zmq_fd_sockets[s->fd] = set;
-            driver_select(port, (ErlDrvEvent)s->fd, ERL_DRV_READ, 1);
-            zmqdrv_fprintf("registered sig_fd(%d) with VM\r\n", s->fd);
+#ifdef __WIN32__
+			zmq_wsa_events[s->wsa_event] = set;
+#endif
         }
     }
 }
 
-int zmq_drv_t::del_socket(uint32_t idx)
+int zmq_drv_t::del_socket(uint32_t idx, bool erase_from_list)
 {
     zmq_sock_info* s;
-    int ret = -1;
 
     zmq_idx_socket_map_t::iterator it = zmq_sockets.find(idx);
     if (it == zmq_sockets.end()) {
-        zmqdrv_fprintf("warning: socket info not found for idx %d\r\n", idx);
-        return ret;
+		zmqdrv_fprintf("[zmq_drv] warning: socket info not found for #%d\r\n", idx);
+        return -1;
     }
 
     s = it->second;
     s->unlink();
     if (s == zmq_sock_infos)
         zmq_sock_infos = s->next;
+
+	zmqdrv_fprintf("[zmq_drv] deleting socket %d with index #%d\r\n", s->fd, idx);
 
     zmq_sockets.erase(idx);
     zmq_idxs.erase(s->socket);
@@ -146,8 +184,13 @@ int zmq_drv_t::del_socket(uint32_t idx)
         // If this was the last socket, demonitor pid.
         zmq_pid_sockets_map_t::iterator it = zmq_pid_sockets.find(s->owner);
         if (it != zmq_pid_sockets.end()) {
-            it->second.sockets.erase(s);
+			if (erase_from_list) {
+				zmqdrv_fprintf("[zmq_drv] erased zmq_sock_info %p from monitored sockets list\r\n", s);
+				it->second.sockets.erase(s);
+			}
+			// if it was the last one then end monitoring for the process
             if (it->second.sockets.empty()) {
+				zmqdrv_fprintf("[zmq_drv] last socket erased, demonitoring process\r\n");
                 driver_demonitor_process(port, &it->second.monitor);
                 zmq_pid_sockets.erase(it);
             }
@@ -159,8 +202,14 @@ int zmq_drv_t::del_socket(uint32_t idx)
             it->second.erase(s);
             if (it->second.empty()) {
                 zmq_fd_sockets.erase(it->first);
-                driver_select(port, (ErlDrvEvent)it->first, ERL_DRV_READ, 0);
-                zmqdrv_fprintf("unregistered sig_fd(%d) with VM\r\n", it->first);
+#ifdef __WIN32__
+				zmq_wsa_events.erase(s->wsa_event);
+				driver_select(port, (ErlDrvEvent) s->wsa_event, ERL_DRV_READ, 0);
+				zmqdrv_fprintf("[zmq_drv] unregistered wsa event %d associated with socket %d on Erlang VM\r\n", s->wsa_event, s->fd);
+#else
+				driver_select(port, (ErlDrvEvent) s->fd, ERL_DRV_READ, 0);
+				zmqdrv_fprintf("[zmq_drv] unregistered socket descriptor %d with Erlang VM\r\n", s->fd);
+#endif        
             }
         }
     }
@@ -172,7 +221,9 @@ int zmq_drv_t::del_socket(uint32_t idx)
 uint32_t zmq_drv_t::get_socket_idx(zmq_socket_t sock) const
 {
     zmq_socket_idx_map_t::const_iterator it = zmq_idxs.find(sock);
-    return it == zmq_idxs.end() ? 0 : it->second->idx;
+	uint32_t idx = (it == zmq_idxs.end() ? 0 : it->second->idx);
+	zmqdrv_fprintf("[zmq_drv] zmq socket %p(#%d) requested\r\n", sock, idx);
+    return idx;
 }
 
 zmq_sock_info* zmq_drv_t::get_socket_info(uint32_t idx)
@@ -183,9 +234,54 @@ zmq_sock_info* zmq_drv_t::get_socket_info(uint32_t idx)
 
 zmq_socket_t zmq_drv_t::get_zmq_socket(uint32_t idx) const
 {
+	zmqdrv_fprintf("[zmq_drv] zmq socket #%d requested\r\n", idx);
     zmq_idx_socket_map_t::const_iterator it = zmq_sockets.find(idx);
-    return it == zmq_sockets.end() ? NULL : it->second->socket;
+	zmq_socket_t zmq_sock = (it == zmq_sockets.end() ? NULL : it->second->socket);
+	zmqdrv_fprintf("[zmq_drv] zmq socket %p(#%d) requested\r\n", zmq_sock, idx);
+    return zmq_sock;
 }
+
+// the next debug methods are not needed if not in debug
+#ifdef ZMQDRV_DEBUG
+static char *
+debug_driver_command(driver_commands command)
+{
+    switch (command) {
+        case ZMQ_INIT:			return (char*)"ZMQ_INIT";
+        case ZMQ_TERM:			return (char*)"ZMQ_TERM";
+        case ZMQ_SOCKET:		return (char*)"ZMQ_SOCKET";
+        case ZMQ_CLOSE:			return (char*)"ZMQ_CLOSE";
+        case ZMQ_SETSOCKOPT:	return (char*)"ZMQ_SETSOCKOPT";
+        case ZMQ_GETSOCKOPT:	return (char*)"ZMQ_GETSOCKOPT";
+        case ZMQ_BIND:			return (char*)"ZMQ_BIND";
+        case ZMQ_CONNECT:		return (char*)"ZMQ_CONNECT";
+        case ZMQ_SEND:			return (char*)"ZMQ_SEND";
+        case ZMQ_RECV:			return (char*)"ZMQ_RECV";
+        case ZMQ_FLUSH:			return (char*)"ZMQ_FLUSH";
+        default:				return (char*)"unknown";
+    }
+}
+
+static char *
+debug_zmq_socket_option(int option)
+{
+    switch (option) {
+        case ZMQ_HWM:           return (char*)"ZMQ_HWM";
+        case ZMQ_SWAP:          return (char*)"ZMQ_SWAP";
+        case ZMQ_AFFINITY:      return (char*)"ZMQ_AFFINITY";
+        case ZMQ_IDENTITY:      return (char*)"ZMQ_IDENTITY";
+        case ZMQ_SUBSCRIBE:     return (char*)"ZMQ_SUBSCRIBE";
+        case ZMQ_UNSUBSCRIBE:   return (char*)"ZMQ_UNSUBSCRIBE";
+        case ZMQ_RATE:          return (char*)"ZMQ_RATE";
+        case ZMQ_RECOVERY_IVL:  return (char*)"ZMQ_RECOVERY_IVL";
+        case ZMQ_MCAST_LOOP:    return (char*)"ZMQ_MCAST_LOOP";
+        case ZMQ_SNDBUF:        return (char*)"ZMQ_SNDBUF";
+        case ZMQ_RCVBUF:        return (char*)"ZMQ_RCVBUF";
+        case ZMQ_ACTIVE:        return (char*)"ZMQ_ACTIVE";
+		default:				return (char*)"unknown";
+    }
+}
+#endif
 
 static ErlDrvTermData error_atom(int err)
 {
@@ -319,7 +415,12 @@ int zmqdrv_driver_init(void)
 static ErlDrvData
 zmqdrv_start(ErlDrvPort port, char* cmd)
 {
-    zmqdrv_fprintf("driver started by pid %ld\r\n", driver_connected(port));
+#ifdef ZMQDRV_DEBUG_TO_FILE
+	char filename[128];
+	sprintf(filename, "./zmq_drv.%d.log", getpid());
+	debug_file = fopen(filename, "a+");
+#endif
+    zmqdrv_fprintf("[zmq_drv] driver started by pid %ld\r\n", driver_connected(port));
     return reinterpret_cast<ErlDrvData>(new zmq_drv_t(port));
 }
 
@@ -328,7 +429,7 @@ static void
 zmqdrv_stop(ErlDrvData handle)
 {
     delete reinterpret_cast<zmq_drv_t*>(handle);
-    zmqdrv_fprintf("driver stopped by pid\r\n");
+    zmqdrv_fprintf("[zmq_drv] driver stopped by pid\r\n");
 }
 
 static void
@@ -336,13 +437,18 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
 {
     zmq_drv_t *drv = (zmq_drv_t *)handle;
 
+    zmqdrv_fprintf("[zmq_drv] --> input ready on descriptor %ld\r\n", (long)event);
+
     // Get 0MQ sockets managed by application thread's signaler
     // identified by "event" fd.
+#ifdef __WIN32__
+	// in win32 we are signalled with the wsa event, not the socket descriptor
+    zmq_wsa_events_map_t::iterator it = drv->zmq_wsa_events.find((HANDLE)event);
+    assert(it != drv->zmq_wsa_events.end());
+#else
     zmq_fd_sockets_map_t::iterator it = drv->zmq_fd_sockets.find((long)event);
-
-    zmqdrv_fprintf("input ready on [idx=%ld]\r\n", (long)event);
-
     assert(it != drv->zmq_fd_sockets.end());
+#endif
 
     zmq_sock_set_t::iterator si = it->second.begin();
 
@@ -350,22 +456,50 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
 
     for (; si != it->second.end(); ++si) {
         zmq_socket_t   s     = (*si)->socket;
+		int			   fd    = (*si)->fd;
         uint32_t       idx   = (*si)->idx;
         ErlDrvTermData owner = (*si)->owner;
         int            rc    = 0;
         uint32_t       events;
         size_t         events_size = sizeof(events);
 
-        zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size);
+		// unregister event with erlang vm while we work with the socket
+#ifdef __WIN32__
+		driver_select(drv->port, (ErlDrvEvent) (*si)->wsa_event, ERL_DRV_READ, 0);
+		zmqdrv_fprintf("[zmq_drv]		unregistered wsa event %ld on Erlang VM while we work on it\r\n", (long)(*si)->wsa_event);
+
+		WSANETWORKEVENTS NetworkEvents;
+		// necessary in order to reset the just fired event
+		// http://msdn.microsoft.com/en-us/library/windows/desktop/ms741572(v=vs.85).aspx
+		WSAEnumNetworkEvents(fd, (*si)->wsa_event, &NetworkEvents);
+#else
+		driver_select(drv->port, (ErlDrvEvent) fd, ERL_DRV_READ, 0);
+		zmqdrv_fprintf("[zmq_drv]		unregistered socket %ld on Erlang VM while we work on it\r\n", (long)event);
+#endif
+
+		if (zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size) != 0) {
+			zmqdrv_fprintf("[zmq_drv] zmq_getsockopt failed on socket %p(#%d)\r\n", s, idx);
+			zmqdrv_error_code(drv, EINVAL);
+			return;
+		}
+
+		zmqdrv_fprintf("[zmq_drv]		socket %p(#%d)\r\n", s, idx);
+		zmqdrv_fprintf("[zmq_drv]		active: %s\r\n", (*si)->active_mode ? "yes" : "no");
+		zmqdrv_fprintf("[zmq_drv]		in caller: %s(%p)\r\n", (*si)->in_caller != 0 ? "yes" : "no", (void*)(*si)->in_caller);
+		zmqdrv_fprintf("[zmq_drv]		out caller: %s(%p)\r\n", (*si)->out_caller != 0 ? "yes" : "no", (void*)(*si)->out_caller);
+		zmqdrv_fprintf("[zmq_drv]		zmq pollin: %s\r\n", events & ZMQ_POLLIN ? "yes" : "no");
+		zmqdrv_fprintf("[zmq_drv]		zmq pollout: %s\r\n", events & ZMQ_POLLOUT ? "yes" : "no");
 
         while (((*si)->active_mode || (*si)->in_caller) && (events & ZMQ_POLLIN)) {
             msg_t msg;
 
+			zmqdrv_fprintf("[zmq_drv] going to read zmq message on socket %p(#%d)...", s, idx);
             rc = zmq_recv(s, &msg, ZMQ_NOBLOCK);
 
             ErlDrvTermData pid = (*si)->active_mode ? owner : (*si)->in_caller;
 
             if (rc == -1) {
+				zmqdrv_fprintf(" read failed...\r\n");
                 if (zmq_errno() != EAGAIN) {
                     ErlDrvTermData spec[] =
                         {ERL_DRV_ATOM,  am_zmq,
@@ -378,6 +512,7 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
                 }
                 break;
             }
+			zmqdrv_fprintf(" successful read\r\n");
 
             if ((*si)->active_mode) {
                 // Send message {zmq, Socket, binary()} to the owner pid
@@ -398,11 +533,19 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
             }
 
             // FIXME: add error handling
-            zmqdrv_fprintf("received %ld byte message relayed to pid %ld\r\n", zmq_msg_size(&msg), pid);
-            zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size);
+            zmqdrv_fprintf("[zmq_drv] received %d byte message relayed to pid %lu\r\n", zmq_msg_size(&msg), pid);
+			if (zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size) != 0) {
+				zmqdrv_fprintf("[zmq_drv] zmq_getsockopt failed on socket %p(#%d)\r\n", s, idx);
+				zmqdrv_error_code(drv, EINVAL);
+				return;
+			}
         }
     
-        zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size);
+		if (zmq_getsockopt(s, ZMQ_EVENTS, &events, &events_size) != 0) {
+			zmqdrv_fprintf("[zmq_drv] zmq_getsockopt failed on socket %p(#%d)\r\n", s, idx);
+			zmqdrv_error_code(drv, EINVAL);
+			return;
+		}
 
         if ((*si)->out_caller != 0 && (events & ZMQ_POLLOUT)) {
             // There was a pending unwritten message on this socket.
@@ -410,7 +553,7 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
             // flag and notify the waiting caller of completion of operation.
             rc = zmq_send(s, &(*si)->out_msg, (*si)->out_flags | ZMQ_NOBLOCK);
 
-            zmqdrv_fprintf("resending message %p (size=%ld) on socket %p (ret=%d)\r\n", 
+			zmqdrv_fprintf("[zmq_drv] resending message %p (size %d) on socket %p (ret: %d)\r\n", 
                 zmq_msg_data(&(*si)->out_msg), zmq_msg_size(&(*si)->out_msg), s, rc);
 
             if (rc == 0) {
@@ -426,7 +569,18 @@ zmqdrv_ready_input(ErlDrvData handle, ErlDrvEvent event)
             }
         }
 
-        zmqdrv_fprintf("--> socket %p events=%d\r\n", s, events);
+		if (events == 0) {
+			zmqdrv_fprintf("[zmq_drv]		spurious event triggered on socket %p(%d)\r\n", s, idx);
+		}
+
+		// reregister event with erlang vm if any pending operations exist
+#ifdef __WIN32__
+		driver_select(drv->port, (ErlDrvEvent) (*si)->wsa_event, ERL_DRV_READ, 1);
+		zmqdrv_fprintf("[zmq_drv]		re-registered wsa event %ld on Erlang VM\r\n", (long)(*si)->wsa_event);
+#else
+		driver_select(drv->port, (ErlDrvEvent) fd, ERL_DRV_READ, 1);
+		zmqdrv_fprintf("[zmq_drv]		re-registered socket %ld on Erlang VM\r\n", (long)event);
+#endif
     }
 }
 
@@ -438,19 +592,25 @@ zmqdrv_process_exit(ErlDrvData handle, ErlDrvMonitor* monitor)
     zmq_drv_t*     drv = (zmq_drv_t *)handle;
     ErlDrvTermData pid = driver_get_monitored_process(drv->port, monitor);
 
-    zmqdrv_fprintf("detected death of %lu process\r\n", pid);
+    zmqdrv_fprintf("[zmq_drv] detected death of process with pid %lu\r\n", pid);
 
     driver_demonitor_process(drv->port, monitor);
 
     // Walk through the list of sockets and close the ones
     // owned by pid.
-    zmq_pid_sockets_map_t::iterator it=drv->zmq_pid_sockets.find(pid);
+    zmq_pid_sockets_map_t::iterator it = drv->zmq_pid_sockets.find(pid);
 
     if (it != drv->zmq_pid_sockets.end()) {
-        zmqdrv_fprintf("pid %lu has %lu sockets to be closed\r\n", pid, it->second.sockets.size());
+        zmqdrv_fprintf("[zmq_drv] pid %lu has %d sockets to be closed\r\n", pid, it->second.sockets.size());
         for(zmq_sock_set_t::iterator sit = it->second.sockets.begin();
             sit != it->second.sockets.end(); ++sit)
-            drv->del_socket((*sit)->idx);
+		{
+			// request that del_socket not remove the element from the list as we are currently iterating that same list
+            drv->del_socket((*sit)->idx, false);
+		}
+		// now that the iteration is finished, clear the whole list
+		it->second.sockets.clear();
+		zmqdrv_fprintf("[zmq_drv] removed all sockets owned by process pid %lu\r\n", pid);
     }
 }
 
@@ -462,7 +622,7 @@ zmqdrv_outputv(ErlDrvData handle, ErlIOVec *ev)
     ErlDrvBinary* data = ev->binv[1];
     unsigned char cmd  = data->orig_bytes[0]; // First byte is the command
 
-    zmqdrv_fprintf("driver got command %d on thread %p\r\n", (int)cmd, erl_drv_thread_self());
+    zmqdrv_fprintf("[zmq_drv] driver got command %s on thread %p\r\n", debug_driver_command((driver_commands) cmd), erl_drv_thread_self());
 
     switch (cmd) {
         case ZMQ_INIT :
@@ -522,7 +682,7 @@ zmqdrv_init(zmq_drv_t *drv, ErlIOVec *ev)
     char* bytes = input->orig_bytes;
     io_threads  = ntohl(*(uint32_t *)(bytes + 1));
 
-    zmqdrv_fprintf("iothreads = %u\r\n", io_threads);
+	zmqdrv_fprintf("[zmq_drv] # iothreads: %u\r\n", io_threads);
 
     if (drv->zmq_context) {
         zmqdrv_error_code(drv, EBUSY);
@@ -547,9 +707,9 @@ zmqdrv_term(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
-    zmqdrv_fprintf("calling zmq_term(context) ...\r\n");
+    zmqdrv_fprintf("[zmq_drv] calling zmq_term(context) ...\r\n");
     int rc = zmq_term(drv->zmq_context);
-    zmqdrv_fprintf("terminated zmq context\r\n");
+    zmqdrv_fprintf("[zmq_drv] terminated zmq context\r\n");
 
     if (rc < 0) {
         zmqdrv_error_code(drv, zmq_errno());
@@ -594,9 +754,25 @@ zmqdrv_socket(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
-    drv->add_socket(zsi);
+#ifdef __WIN32__
+	// create a new win32 event that we will associate with the newly created socket
+	zsi->wsa_event = WSACreateEvent();
+	// perform the association
+	WSAEventSelect(zsi->fd, zsi->wsa_event, FD_READ | FD_WRITE);
 
-    zmqdrv_fprintf("socket %p [idx=%d] owner=%ld\r\n", s, n, zsi->owner);
+	zmqdrv_fprintf("[zmq_drv] associated socket descriptor %d with wsa event %ld\r\n", zsi->fd, (long)zsi->wsa_event);
+#endif
+
+	zmqdrv_fprintf("[zmq_drv] created zmq socket %p(#%d), socket descriptor: %d, owner: %ld\r\n", s, n, zsi->fd, zsi->owner);
+
+    drv->add_socket(zsi);
+#ifdef __WIN32__
+	driver_select(drv->port, (ErlDrvEvent)zsi->wsa_event, ERL_DRV_READ, 1);
+	zmqdrv_fprintf("[zmq_drv] registered wsa event %ld on Erlang VM\r\n", (long)zsi->wsa_event);
+#else
+	driver_select(drv->port, (ErlDrvEvent)sig_fd, ERL_DRV_READ, 1);
+	zmqdrv_fprintf("[zmq_drv] registered socket %d on Erlang VM\r\n", sig_fd);
+#endif
 
     ErlDrvTermData spec[] = {ERL_DRV_ATOM,  am_zok,
                              ERL_DRV_UINT,  n,
@@ -616,9 +792,9 @@ zmqdrv_close(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
-    int ret = drv->del_socket(idx);
+    int ret = drv->del_socket(idx, true);
 
-    zmqdrv_fprintf("close [idx=%d] -> %d\r\n", idx, ret);
+	zmqdrv_fprintf("[zmq_drv] close #%d, result: %d\r\n", idx, ret);
 
     if (ret < 0) {
         zmqdrv_error_code(drv, zmq_errno());
@@ -643,7 +819,7 @@ zmqdrv_setsockopt(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
-    zmqdrv_fprintf("setsockopt %p (setting %d options)\r\n", si->socket, (int)n);
+	zmqdrv_fprintf("[zmq_drv] setsockopt %p(#%d) (setting %d options)\r\n", si->socket, idx, (int)n);
 
     for (uint8_t j=0; j < n; ++j) {
         unsigned char option = *p++;
@@ -663,12 +839,16 @@ zmqdrv_setsockopt(zmq_drv_t *drv, ErlIOVec *ev)
             case ZMQ_SNDBUF:        assert(optvallen == 8);  break;
             case ZMQ_RCVBUF:        assert(optvallen == 8);  break;
             case ZMQ_ACTIVE:        assert(optvallen == 1);  break;
+			default:				break;
         }
 
-        zmqdrv_fprintf("setsockopt %p (%d)\r\n", si->socket, option);
+		zmqdrv_fprintf("[zmq_drv] setsockopt %p(#%d) (%s)\r\n", si->socket, idx, debug_zmq_socket_option((int)option));
 
         if (option == ZMQ_ACTIVE)
+		{
             si->active_mode = *(char*)optval;
+			zmqdrv_fprintf("[zmq_drv] %s socket %p(#%d)\r\n", si->active_mode ? "activating" : "deactivating", si->socket, idx);
+		}
         else if (zmq_setsockopt(si->socket, option, optval, optvallen) < 0) {
             zmqdrv_error_code(drv, zmq_errno());
             return;
@@ -703,7 +883,7 @@ zmqdrv_getsockopt(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
-    zmqdrv_fprintf("setsockopt %p (setting %d options)\r\n", si->socket, (int)n);
+	zmqdrv_fprintf("[zmq_drv] getsockopt socket %p(#%d), option: %d\r\n", si->socket, idx, opt);
 
     switch (opt) {
         case ZMQ_AFFINITY:
@@ -848,6 +1028,12 @@ zmqdrv_bind(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
+    int sig_fd;
+    size_t sig_size = sizeof(sig_fd);
+    zmq_getsockopt(s, ZMQ_FD, &sig_fd, &sig_size);	
+
+	zmqdrv_fprintf("[zmq_drv] successful bind of zmq socket %p(#%d), socket descriptor %d to endpoint %s\r\n", s, idx, sig_fd, addr);
+
     zmqdrv_ok(drv);
 }
 
@@ -874,8 +1060,6 @@ zmqdrv_connect(zmq_drv_t *drv, ErlIOVec *ev)
     memcpy(addr, bytes + 5, size);
     addr[size] = '\0';
 
-    zmqdrv_fprintf("connect %s\r\n", addr);
-
     if (!addr[0]) {
         zmqdrv_error_code(drv, EINVAL);
         return;
@@ -885,6 +1069,8 @@ zmqdrv_connect(zmq_drv_t *drv, ErlIOVec *ev)
         zmqdrv_error_code(drv, zmq_errno());
         return;
     }
+
+	zmqdrv_fprintf("[zmq_drv] socket %p(#%d) connected to %s\r\n", s, idx, addr);
 
     zmqdrv_ok(drv);
 }
@@ -905,18 +1091,21 @@ zmqdrv_send(zmq_drv_t *drv, ErlIOVec *ev)
         return;
     }
 
+    if (si->out_caller != 0) {
+        // There's still an unwritten message pending
+		zmqdrv_fprintf("[zmq_drv] there's still an unwritten message pending on socket %p(#%d)\r\n", 
+			si->socket, idx);
+        zmqdrv_error_code(drv, EBUSY);
+        return;
+    }
+
 #ifdef ZMQDRV_DEBUG
     uint32_t events;
     size_t events_size = sizeof(events);
     zmq_getsockopt(si->socket, ZMQ_EVENTS, &events, &events_size);
-    zmqdrv_fprintf("sending %p [idx=%d] %lu bytes (events=%d)\r\n", si->socket, idx, size, events);
+	zmqdrv_fprintf("[zmq_drv] sending %u bytes of data on zmq socket %p(#%d) (events: %d)\r\n", 
+			size, si->socket, idx, events);
 #endif
-
-    if (si->out_caller != 0) {
-        // There's still an unwritten message pending
-        zmqdrv_error_code(drv, EBUSY);
-        return;
-    }
 
     // Increment the reference count on binary so that zmq can
     // take ownership of it.
@@ -930,7 +1119,11 @@ zmqdrv_send(zmq_drv_t *drv, ErlIOVec *ev)
 
     if (zmq_send(si->socket, &si->out_msg, flags | ZMQ_NOBLOCK) == 0) {
         zmqdrv_ok(drv);
+#ifdef __WIN32__
+		zmqdrv_ready_input((ErlDrvData)drv, (ErlDrvEvent)si->wsa_event);
+#else
         zmqdrv_ready_input((ErlDrvData)drv, (ErlDrvEvent)si->fd);
+#endif
     } else {
         int e = zmq_errno();
         if (e == EAGAIN) {
@@ -965,25 +1158,36 @@ zmqdrv_recv(zmq_drv_t *drv, ErlIOVec *ev)
     if (si->in_caller != 0) {
         // Previous recv() call in passive mode didn't complete.
         // The owner must be blocked waiting for result.
+		zmqdrv_fprintf("[zmq_drv] previous recv call in passive mode didn't complete on socket %p(#%d)\r\n", si->socket, idx);
         zmqdrv_error_code(drv, EBUSY);
         return;
     }
 
     uint32_t events;
     size_t events_size = sizeof(events);
-    zmq_getsockopt(si->socket, ZMQ_EVENTS, &events, &events_size);
+	if (zmq_getsockopt(si->socket, ZMQ_EVENTS, &events, &events_size) != 0) {
+		zmqdrv_fprintf("[zmq_drv] zmq_getsockopt failed on socket %p(#%d)\r\n", si->socket, idx);
+        zmqdrv_error_code(drv, EINVAL);
+        return;
+	}
 
-    if (events == 0)
+    if (events == 0) {
         si->in_caller = driver_caller(drv->port);
+		zmqdrv_fprintf("[zmq_drv] no data ready for socket %p(#%d), blocking caller: %lu\r\n", si->socket, idx, si->in_caller);
+	}
     else {
         msg_t msg;
 
         if (zmq_recv(si->socket, &msg, ZMQ_NOBLOCK) == 0)
             zmqdrv_ok_binary(drv, driver_caller(drv->port), zmq_msg_data(&msg), zmq_msg_size(&msg));
         else if (zmq_errno() == EAGAIN) {
+			zmqdrv_fprintf("[zmq_drv] no input available on socket %p(#%d)\r\n", si->socket, idx);
             // No input available. Make the caller wait by not returning result
             si->in_caller = driver_caller(drv->port);
         } else
+		{
+			zmqdrv_fprintf("[zmq_drv] error reading data on socket %p(#%d): %p\r\n", si->socket, idx, zmq_strerror(zmq_errno()));
             zmqdrv_error_code(drv, zmq_errno());
+		}
     }
 }

@@ -15,8 +15,9 @@
 #include <ei.h>
 #include <map>
 #include <set>
+#include <stdint.h>
 
-/* Erlang driver commands. */
+/* Erlang driver commands. Must be synchronized with include/zmq.hrl */
 enum driver_commands {
       ZMQ_INIT = 1
     , ZMQ_TERM
@@ -54,6 +55,9 @@ struct zmq_sock_info {
     uint32_t       idx;         // index of socket passed to Erlang process
     ErlDrvTermData owner;       // Erlang owner pid of this socket
     int            fd;          // Signaling fd for this socket
+#ifdef __WIN32__
+	HANDLE		   wsa_event;   // win32 event associated with this socket
+#endif
     ErlDrvTermData in_caller;   // Caller's pid of the last recv() command in passive mode
     zmq_msg_t      out_msg;     // Pending message to be written to 0MQ socket
     int            out_flags;   // Send flags for the pending message
@@ -98,6 +102,9 @@ typedef std::map<uint32_t, zmq_sock_info*>          zmq_idx_socket_map_t;
 typedef std::map<zmq_socket_t, zmq_sock_info*>      zmq_socket_idx_map_t;
 typedef std::map<ErlDrvTermData, monitor_sockets_t> zmq_pid_sockets_map_t;
 typedef std::map<int, zmq_sock_set_t>               zmq_fd_sockets_map_t;
+#ifdef __WIN32__
+	typedef std::map<HANDLE, zmq_sock_set_t>            zmq_wsa_events_map_t;
+#endif
 
 // Driver state structure
 struct zmq_drv_t {
@@ -114,7 +121,11 @@ struct zmq_drv_t {
     zmq_pid_sockets_map_t       zmq_pid_sockets;
     // Maps <thread's signaling fd> -> list of 0MQ socket structs managed by signaler
     zmq_fd_sockets_map_t        zmq_fd_sockets;
-    // Current socket struct index
+#ifdef __WIN32__
+    // Maps <thread's signaling win32 wsa event> -> list of 0MQ socket structs managed by signaler
+	zmq_wsa_events_map_t		zmq_wsa_events;
+#endif
+	// Current socket struct index
     uint32_t                    zmq_socket_count;
 
     zmq_drv_t(ErlDrvPort _port) 
@@ -127,7 +138,7 @@ struct zmq_drv_t {
     ~zmq_drv_t();
 
     void            add_socket(zmq_sock_info* sock);
-    int             del_socket(uint32_t idx);
+    int				del_socket(uint32_t idx, bool erase_from_list);
     uint32_t        get_socket_idx(zmq_socket_t sock) const;
     zmq_sock_info*  get_socket_info(uint32_t idx);
     zmq_socket_t    get_zmq_socket(uint32_t idx) const;
