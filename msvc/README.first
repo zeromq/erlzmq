@@ -25,3 +25,9 @@ Debug:
 		ZMQDRV_DEBUG					enables debug to stderr
 			ZMQDRV_DEBUG_TO_FILE		debugs to file in current dir, filename zmq_drv.%process_identifier&.log, 
 										ZMQDRV_DEBUG must be defined
+
+generating the .ez file:
+
+cd %erlzmq_dir%
+cd ..
+zip erlzmq.ez erlzmq/ebin/* erlzmq/priv/*
