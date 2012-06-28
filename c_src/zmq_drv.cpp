@@ -768,7 +768,8 @@ zmqdrv_socket(zmq_drv_t *drv, ErlIOVec *ev)
     drv->add_socket(zsi);
 #ifdef __WIN32__
 	driver_select(drv->port, (ErlDrvEvent)zsi->wsa_event, ERL_DRV_READ, 1);
-	zmqdrv_fprintf("[zmq_drv] registered wsa event %ld on Erlang VM\r\n", (long)zsi->wsa_event);
+	zmqdrv_fprintf("[zmq_drv] registered wsa event %ld on Erlang VM, associated with socket %d\r\n", 
+			(long)zsi->wsa_event, zsi->fd);
 #else
 	driver_select(drv->port, (ErlDrvEvent)sig_fd, ERL_DRV_READ, 1);
 	zmqdrv_fprintf("[zmq_drv] registered socket %d on Erlang VM\r\n", sig_fd);
