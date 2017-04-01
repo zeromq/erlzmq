@@ -99,4 +99,4 @@ BSD License
 * Through Github [Issues](http://github.com/zeromq/erlzmq/issues)
 
 ## Copying
-Erlang bindings are released under open-source BSD License (see LICENSE file)
+Erlang bindings are released under open-source BSD License (see [LICENSE](https://github.com/zeromq/erlzmq/blob/master/LICENSE) file)
