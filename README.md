@@ -1,7 +1,7 @@
 # Erlang bindings for [ZeroMQ](http://www.zeromq.org)
 
 ## Building
-The bindings work against the `master` branch of [ZeroMQ2-x](https://github.com/zeromq/zeromq2-x):
+Bindings work against [zeromq/ZeroMQ2-x](https://github.com/zeromq/zeromq2-x)'s `master` branch.
 ```bash
 $ git clone git@github.com:zeromq/erlzmq.git
 $ cd erlzmq
