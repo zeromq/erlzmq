@@ -15,7 +15,7 @@ Documentation
     See http://zeromq.github.com/erlzmq for full documentation.
     (Content uploaded from doc/index.html).
 
-Updating documentatin on GitHub
+Updating documentation on GitHub
     $ git checkout master   # make sure you are on master branch
     $ make gitdocs          # this will update gh-pages branch and commit changes to origin
 
