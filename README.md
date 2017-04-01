@@ -8,6 +8,10 @@ $ cd erlzmq
 $ ./bootstrap
 $ ./configure --with-zeromq=/path/to/zeromq
 $ make
+```
+
+Optionally build the docs:
+```bash
 $ make docs
 ```
 
